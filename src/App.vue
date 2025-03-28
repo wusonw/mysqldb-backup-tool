@@ -137,7 +137,7 @@ watch(
 
 <template>
   <v-app>
-    <v-app-bar elevation="1" color="primary">
+    <v-app-bar color="primary">
       <v-app-bar-title>MySQL数据库备份工具</v-app-bar-title>
       <v-spacer></v-spacer>
 
@@ -156,10 +156,9 @@ watch(
       </v-btn>
     </v-app-bar>
 
-    <v-main>
+    <v-main class="main-content">
       <v-container
-        class="d-flex flex-column align-center justify-center"
-        style="height: 100%"
+        class="d-flex flex-column align-center justify-center main-container pa-0"
       >
         <!-- 圆形备份按钮 -->
         <v-tooltip text="开始备份">
@@ -350,9 +349,3 @@ watch(
     </v-snackbar>
   </v-app>
 </template>
-
-<style scoped>
-.v-container {
-  min-height: 80vh;
-}
-</style>
