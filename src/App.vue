@@ -2,9 +2,7 @@
 import { ref, reactive, onMounted, computed } from "vue";
 import Settings from "./components/Settings.vue";
 import { saveSetting, getSetting } from "./utils/database";
-// 暂时注释掉Tauri API的导入，避免类型错误
-// import { fs } from "@tauri-apps/api/fs";
-// import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-shell";
 
 // 状态变量
 const isConnected = ref(false);
@@ -65,6 +63,24 @@ function getBackupFilePath(): string {
 function updateBackupProgress(percent: number) {
   backupProgress.value = percent;
   backupStatus.value = `备份中... ${percent}%`;
+}
+
+// 打开备份路径文件夹
+async function openBackupFolder() {
+  try {
+    if (!backupSettings.path) {
+      showSnackbar("未设置备份路径", "error");
+      return;
+    }
+
+    console.log("尝试打开路径:", backupSettings.path);
+
+    // 直接使用原始路径
+    await open(backupSettings.path);
+  } catch (error) {
+    console.error("打开文件夹失败:", error);
+    showSnackbar(`打开文件夹失败: ${error}`, "error");
+  }
 }
 
 // 方法：开始备份
@@ -204,8 +220,23 @@ onMounted(async () => {
           上次备份时间: {{ lastBackupTime }}
         </div>
 
-        <div v-if="backupSettings.path" class="text-caption mt-1 text-grey">
+        <div
+          v-if="backupSettings.path"
+          class="text-caption mt-1 text-grey d-flex align-center"
+        >
           备份路径: {{ backupSettings.path }}
+          <!-- 打开按钮 -->
+          <v-btn
+            class="ml-2"
+            :ripple="false"
+            size="small"
+            variant="text"
+            density="comfortable"
+            color="primary"
+            icon="mdi-folder-open"
+            @click="openBackupFolder"
+            title="定位备份文件夹"
+          ></v-btn>
         </div>
         <div v-else class="text-caption mt-1 text-error">
           未设置备份路径，请在设置中选择
