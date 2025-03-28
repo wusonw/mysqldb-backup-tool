@@ -137,29 +137,27 @@ watch(
 
 <template>
   <v-app>
-    <v-app-bar color="primary">
-      <v-app-bar-title>MySQL数据库备份工具</v-app-bar-title>
-      <v-spacer></v-spacer>
-
-      <!-- 数据库连接状态显示 -->
-      <v-chip
-        class="mr-3"
-        :color="isConnected ? 'success' : 'error'"
-        text-color="white"
-      >
-        {{ isConnected ? "数据库已连接" : "数据库未连接" }}
-      </v-chip>
-
-      <!-- 设置按钮 -->
-      <v-btn icon @click="showSettings = true">
-        <v-icon>mdi-cog</v-icon>
-      </v-btn>
-    </v-app-bar>
-
     <v-main class="main-content">
       <v-container
         class="d-flex flex-column align-center justify-center main-container pa-0"
       >
+        <!-- 右上角状态和设置 -->
+        <div class="status-bar">
+          <!-- 数据库连接状态显示 -->
+          <v-chip
+            class="mr-3"
+            :color="isConnected ? 'success' : 'error'"
+            text-color="white"
+          >
+            {{ isConnected ? "数据库已连接" : "数据库未连接" }}
+          </v-chip>
+
+          <!-- 设置按钮 -->
+          <v-btn icon @click="showSettings = true">
+            <v-icon>mdi-cog</v-icon>
+          </v-btn>
+        </div>
+
         <!-- 圆形备份按钮 -->
         <v-tooltip text="开始备份">
           <template v-slot:activator="{ props }">
@@ -170,13 +168,14 @@ watch(
               size="x-large"
               elevation="8"
               rounded="circle"
-              width="100"
-              height="100"
-              class="mb-5"
+              width="160"
+              height="160"
+              class="backup-btn mb-5"
               :loading="isBackingUp"
               :disabled="!isConnected || isBackingUp"
               @click="startBackup"
             >
+              <v-icon size="64"></v-icon>
             </v-btn>
           </template>
         </v-tooltip>
@@ -349,3 +348,42 @@ watch(
     </v-snackbar>
   </v-app>
 </template>
+
+<style>
+/* 添加到 components.css 中 */
+.status-bar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  z-index: 1;
+}
+
+/* 设置按钮样式优化 */
+.status-bar .v-btn--icon {
+  margin-left: 8px;
+  background-color: rgba(var(--v-theme-surface-variant), 0.1);
+}
+
+/* 将这些样式移动到 components.css */
+.backup-btn {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.backup-btn:not(.v-btn--disabled):hover {
+  transform: scale(1.05);
+}
+
+.backup-btn .v-icon {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.backup-btn:active:not(.v-btn--disabled) .v-icon {
+  transform: scale(0.95);
+}
+
+.backup-btn.v-btn--loading .v-icon {
+  opacity: 0;
+}
+</style>
