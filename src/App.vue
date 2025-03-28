@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted } from "vue";
 // import { open } from "@tauri-apps/api/dialog";
-import { invoke } from "@tauri-apps/api/core";
+// import { invoke } from "@tauri-apps/api/core";
 
 // 状态变量
 const isConnected = ref(false);
@@ -23,7 +23,7 @@ const backupFrequencies = [
 const settings = reactive({
   database: {
     host: "localhost",
-    port: "3306",
+    port: 3306,
     username: "root",
     password: "",
     database: "",
@@ -129,7 +129,7 @@ onMounted(() => {
 // 监听主题变化
 watch(
   () => settings.system.darkMode,
-  (newValue) => {
+  (_newValue) => {
     // 切换主题逻辑
   }
 );
@@ -214,14 +214,16 @@ watch(
                   class="mb-3"
                 ></v-text-field>
 
-                <v-text-field
+                <v-number-input
                   v-model="settings.database.port"
                   label="端口"
                   placeholder="3306"
                   variant="outlined"
                   hide-details="auto"
                   class="mb-3"
-                ></v-text-field>
+                  :min="1"
+                  :max="65535"
+                ></v-number-input>
 
                 <v-text-field
                   v-model="settings.database.username"
@@ -285,14 +287,15 @@ watch(
                   class="mb-3"
                 ></v-select>
 
-                <v-text-field
+                <v-number-input
                   v-model="settings.backup.keepCount"
                   label="保留备份数量"
-                  type="number"
                   variant="outlined"
                   hide-details="auto"
                   class="mb-3"
-                ></v-text-field>
+                  :min="1"
+                  :max="100"
+                ></v-number-input>
               </v-form>
             </v-window-item>
 
