@@ -87,17 +87,17 @@ const selectBackupPath = async () => {
   }
 };
 
-// 方法：保存设置
-async function saveSettings() {
-  try {
-    // 这里只是前端模拟，实际实现需要调用后端API
-    showSnackbar("设置已保存", "success");
-    showSettings.value = false;
-    testConnection();
-  } catch (error) {
-    showSnackbar(`保存设置失败: ${error}`, "error");
-  }
-}
+// // 方法：保存设置
+// async function saveSettings() {
+//   try {
+//     // 这里只是前端模拟，实际实现需要调用后端API
+//     showSnackbar("设置已保存", "success");
+//     showSettings.value = false;
+//     testConnection();
+//   } catch (error) {
+//     showSnackbar(`保存设置失败: ${error}`, "error");
+//   }
+// }
 
 // 方法：开始备份
 async function startBackup() {
@@ -148,10 +148,11 @@ watch(
             class="mr-3"
             :color="isConnected ? 'success' : 'error'"
             text-color="white"
+            size="large"
           >
             {{ isConnected ? "数据库已连接" : "数据库未连接" }}
           </v-chip>
-
+          <v-spacer />
           <!-- 设置按钮 -->
           <v-btn icon @click="showSettings = true">
             <v-icon>mdi-cog</v-icon>
@@ -191,20 +192,18 @@ watch(
     <v-dialog v-model="showSettings" width="600">
       <v-card>
         <v-card-title>
-          <span class="text-h5">设置</span>
-        </v-card-title>
-
-        <v-card-text>
           <v-tabs v-model="activeTab">
             <v-tab value="database">数据库配置</v-tab>
             <v-tab value="backup">备份设置</v-tab>
             <v-tab value="system">系统设置</v-tab>
           </v-tabs>
+        </v-card-title>
 
+        <v-card-text>
           <v-window v-model="activeTab">
             <!-- 数据库配置页 -->
             <v-window-item value="database">
-              <v-form class="mt-5">
+              <v-form class="mt-2">
                 <v-text-field
                   v-model="settings.database.host"
                   label="主机地址"
@@ -250,7 +249,13 @@ watch(
                   class="mb-3"
                 ></v-text-field>
 
-                <v-btn color="primary" block @click="testConnection">
+                <v-btn
+                  color="primary"
+                  size="large"
+                  class="border"
+                  block
+                  @click="testConnection"
+                >
                   测试连接
                 </v-btn>
               </v-form>
@@ -258,7 +263,7 @@ watch(
 
             <!-- 备份设置页 -->
             <v-window-item value="backup">
-              <v-form class="mt-5">
+              <v-form class="mt-2">
                 <v-text-field
                   v-model="settings.backup.path"
                   label="备份文件保存路径"
@@ -301,7 +306,7 @@ watch(
 
             <!-- 系统设置页 -->
             <v-window-item value="system">
-              <v-form class="mt-5">
+              <v-form class="mt-2">
                 <v-switch
                   v-model="settings.system.darkMode"
                   label="深色模式"
@@ -329,16 +334,6 @@ watch(
             </v-window-item>
           </v-window>
         </v-card-text>
-
-        <v-card-actions>
-          <v-spacer></v-spacer>
-          <v-btn color="primary" variant="text" @click="saveSettings">
-            保存
-          </v-btn>
-          <v-btn color="error" variant="text" @click="showSettings = false">
-            取消
-          </v-btn>
-        </v-card-actions>
       </v-card>
     </v-dialog>
 
@@ -355,12 +350,13 @@ watch(
 <style>
 /* 添加到 components.css 中 */
 .status-bar {
-  position: absolute;
-  top: 16px;
-  right: 16px;
   display: flex;
   align-items: center;
   z-index: 1;
+  width: 100%;
+  padding: 0 16px;
+  position: absolute;
+  top: 16px;
 }
 
 /* 设置按钮样式优化 */
