@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from "vue";
+import { ref, reactive, onMounted, computed } from "vue";
 import Settings from "./components/Settings.vue";
 import { saveSetting, getSetting } from "./utils/database";
-// import { open } from "@tauri-apps/api/dialog";
+// 暂时注释掉Tauri API的导入，避免类型错误
+// import { fs } from "@tauri-apps/api/fs";
 // import { invoke } from "@tauri-apps/api/core";
 
 // 状态变量
@@ -11,6 +12,13 @@ const isBackingUp = ref(false);
 const backupStatus = ref("点击按钮开始备份");
 const lastBackupTime = ref("");
 const showSettings = ref(false);
+const backupProgress = ref(0); // 备份进度百分比
+const backupSettings = reactive({
+  path: "",
+  auto: false,
+  frequency: "daily",
+  keepCount: 5,
+});
 
 // 提示框状态
 const snackbar = reactive({
@@ -31,31 +39,84 @@ function updateConnectionStatus(status: boolean) {
   isConnected.value = status;
 }
 
+// 生成唯一的备份文件名
+function generateBackupFileName(): string {
+  const now = new Date();
+  const dateStr = now.toISOString().replace(/[:.]/g, "-").split("T")[0];
+  const timeStr = now
+    .toISOString()
+    .replace(/[:.]/g, "-")
+    .split("T")[1]
+    .split(".")[0];
+  return `mysql_backup_${dateStr}_${timeStr}.sql`;
+}
+
+// 生成完整的备份文件路径
+function getBackupFilePath(): string {
+  if (!backupSettings.path) return "";
+
+  const fileName = generateBackupFileName();
+  // 确保路径使用正确的分隔符
+  const normalizedPath = backupSettings.path.replace(/\\/g, "/");
+  return `${normalizedPath}/${fileName}`;
+}
+
+// 模拟备份进度更新
+function updateBackupProgress(percent: number) {
+  backupProgress.value = percent;
+  backupStatus.value = `备份中... ${percent}%`;
+}
+
 // 方法：开始备份
 async function startBackup() {
   if (!isConnected.value || isBackingUp.value) return;
 
-  try {
-    isBackingUp.value = true;
-    backupStatus.value = "正在备份...";
+  // 检查是否设置了备份路径
+  if (!backupSettings.path) {
+    showSnackbar("请先在设置中选择备份路径", "error");
+    return;
+  }
 
-    // 模拟备份过程
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  try {
+    // 重置状态
+    isBackingUp.value = true;
+    backupProgress.value = 0;
+    backupStatus.value = "正在准备备份...";
+
+    // 生成备份文件路径
+    const backupFilePath = getBackupFilePath();
+    console.log(`备份文件将保存到: ${backupFilePath}`);
+
+    // 在生产环境中，这里应该调用Tauri的API进行真实的MySQL备份
+    // 现在模拟备份过程
+    for (let i = 0; i <= 100; i += 10) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      updateBackupProgress(i);
+    }
 
     backupStatus.value = "备份完成";
+    backupProgress.value = 100;
     lastBackupTime.value = new Date().toLocaleString();
 
     // 保存最后备份时间到数据库
     await saveSetting("lastBackupTime", lastBackupTime.value);
 
-    showSnackbar("数据库备份成功", "success");
+    showSnackbar(`数据库备份成功，已保存到:\n${backupFilePath}`, "success");
   } catch (error) {
     backupStatus.value = "备份出错";
+    backupProgress.value = 0;
     showSnackbar(`备份错误: ${error}`, "error");
   } finally {
     isBackingUp.value = false;
   }
 }
+
+// 是否显示备份进度
+const showProgress = computed(() => {
+  return (
+    isBackingUp.value && backupProgress.value > 0 && backupProgress.value < 100
+  );
+});
 
 // 初始化
 onMounted(async () => {
@@ -65,6 +126,17 @@ onMounted(async () => {
     if (savedLastBackupTime) {
       lastBackupTime.value = savedLastBackupTime;
     }
+
+    // 加载备份设置
+    backupSettings.path = await getSetting<string>("backup.path", "");
+    backupSettings.auto = await getSetting<boolean>("backup.auto", false);
+    backupSettings.frequency = await getSetting<string>(
+      "backup.frequency",
+      "daily"
+    );
+    backupSettings.keepCount = await getSetting<number>("backup.keepCount", 5);
+
+    console.log("已加载备份设置:", backupSettings);
   } catch (error) {
     console.error("加载设置失败:", error);
   }
@@ -117,9 +189,26 @@ onMounted(async () => {
           </template>
         </v-tooltip>
 
+        <!-- 备份进度条 -->
+        <v-progress-linear
+          v-if="showProgress"
+          :model-value="backupProgress"
+          color="primary"
+          height="10"
+          rounded
+          class="mb-3 w-75"
+        ></v-progress-linear>
+
         <div class="text-h5 mt-4">{{ backupStatus }}</div>
         <div v-if="lastBackupTime" class="text-subtitle-1 mt-2">
           上次备份时间: {{ lastBackupTime }}
+        </div>
+
+        <div v-if="backupSettings.path" class="text-caption mt-1 text-grey">
+          备份路径: {{ backupSettings.path }}
+        </div>
+        <div v-else class="text-caption mt-1 text-error">
+          未设置备份路径，请在设置中选择
         </div>
       </v-container>
     </v-main>
@@ -132,7 +221,7 @@ onMounted(async () => {
     />
 
     <!-- 提示框 -->
-    <v-snackbar v-model="snackbar.show" :color="snackbar.color">
+    <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="5000">
       {{ snackbar.text }}
       <template v-slot:actions>
         <v-btn variant="text" @click="snackbar.show = false"> 关闭 </v-btn>

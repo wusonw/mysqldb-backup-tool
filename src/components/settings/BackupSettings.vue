@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from "vue";
 import { saveSetting, getSetting } from "../../utils/database";
+import { open } from "@tauri-apps/plugin-dialog";
 
 // 定义props
 const props = defineProps({
@@ -68,11 +69,20 @@ onMounted(async () => {
 // 选择备份路径
 const selectBackupPath = async () => {
   try {
-    // 这里可以实现文件对话框选择路径
-    // 现在只是使用模拟数据
-    path.value = "/用户/文档/数据库备份";
-    emit("statusUpdate", "已选择备份路径", "success");
+    // 使用Tauri的对话框API选择文件夹
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "选择备份保存路径",
+    });
+
+    if (selected !== null) {
+      // 将选择的路径更新到状态
+      path.value = selected as string;
+      emit("statusUpdate", "已选择备份路径", "success");
+    }
   } catch (error) {
+    console.error("选择路径错误:", error);
     emit("statusUpdate", `选择路径错误: ${error}`, "error");
   }
 };
@@ -83,11 +93,12 @@ const selectBackupPath = async () => {
     <v-text-field
       v-model="path"
       label="备份文件保存路径"
+      readonly
       variant="outlined"
       hide-details="auto"
-      class="mb-3"
+      class="mb-3 cursor-pointer"
       append-inner-icon="mdi-folder"
-      @click:append-inner="selectBackupPath"
+      @click="selectBackupPath"
     ></v-text-field>
 
     <v-switch
