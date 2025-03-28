@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from "vue";
 import { saveSetting, getSetting } from "../../utils/database";
+import Database from "@tauri-apps/plugin-sql";
 
 // 定义props
 const props = defineProps({
@@ -24,6 +25,7 @@ const username = ref(props.databaseSettings.username || "root");
 const password = ref(props.databaseSettings.password || "");
 const database = ref(props.databaseSettings.database || "");
 const showPassword = ref(false); // 密码显示状态
+const isLoading = ref(false); // 添加加载状态
 
 // 监听本地状态变化
 watch([host, port, username, password, database], async () => {
@@ -95,14 +97,33 @@ onMounted(async () => {
 
 // 测试数据库连接
 async function testConnection() {
+  isLoading.value = true;
   try {
-    // 这里可以实现实际的数据库连接测试
-    // 现在只是返回成功信息
+    console.log("开始测试MySQL数据库连接...");
+
+    // 构建MySQL连接URL
+    const connectionUrl = `mysql://${username.value}:${encodeURIComponent(
+      password.value
+    )}@${host.value}:${port.value}/${database.value}`;
+    console.log(`尝试连接: ${connectionUrl.replace(/:[^:]*@/, ":******@")}`); // 隐藏密码
+
+    // 尝试连接数据库
+    const db = await Database.load(connectionUrl);
+
+    // 尝试执行简单查询
+    const result = await db.execute("SELECT 1 as connected");
+    console.log("连接测试结果:", result);
+
+    // 如果代码能执行到这里，说明连接成功
     emit("statusUpdate", "数据库连接成功", "success");
-    emit("connectionChange", true); // 通知连接状态变化
+    emit("connectionChange", true);
   } catch (error) {
-    emit("statusUpdate", `连接错误: ${error}`, "error");
-    emit("connectionChange", false); // 通知连接状态变化
+    console.error("MySQL连接测试失败:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    emit("statusUpdate", `连接错误: ${errorMessage}`, "error");
+    emit("connectionChange", false);
+  } finally {
+    isLoading.value = false;
   }
 }
 
@@ -123,7 +144,7 @@ function togglePasswordVisibility() {
       class="mb-3"
     ></v-text-field>
 
-    <v-text-field
+    <v-number-input
       v-model.number="port"
       label="端口"
       placeholder="3306"
@@ -133,7 +154,7 @@ function togglePasswordVisibility() {
       type="number"
       :min="1"
       :max="65535"
-    ></v-text-field>
+    ></v-number-input>
 
     <v-text-field
       v-model="username"
@@ -149,7 +170,7 @@ function togglePasswordVisibility() {
       :type="showPassword ? 'text' : 'password'"
       variant="outlined"
       hide-details="auto"
-      class="mb-3"
+      class="mb-3 flex-grow-1"
       :append-inner-icon="showPassword ? 'mdi-eye-off' : 'mdi-eye'"
       @click:append-inner="togglePasswordVisibility"
     ></v-text-field>
@@ -168,6 +189,7 @@ function togglePasswordVisibility() {
       class="border"
       block
       @click="testConnection"
+      :loading="isLoading"
     >
       测试连接
     </v-btn>
