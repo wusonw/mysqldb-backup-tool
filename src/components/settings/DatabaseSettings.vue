@@ -26,9 +26,16 @@ const password = ref(props.databaseSettings.password || "");
 const database = ref(props.databaseSettings.database || "");
 const showPassword = ref(false); // 密码显示状态
 const isLoading = ref(false); // 添加加载状态
+const settingsSaveDisabled = ref(false); // 添加设置保存禁用标志
 
 // 监听本地状态变化
 watch([host, port, username, password, database], async () => {
+  // 如果设置保存被禁用，则不执行保存操作
+  if (settingsSaveDisabled.value) {
+    console.log("设置保存当前已禁用，跳过保存操作");
+    return;
+  }
+
   // 更新父组件的设置
   emit("update:databaseSettings", {
     host: host.value,
@@ -98,25 +105,58 @@ onMounted(async () => {
 // 测试数据库连接
 async function testConnection() {
   isLoading.value = true;
+  // 在测试连接期间禁用设置保存，避免在连接池关闭时尝试保存
+  settingsSaveDisabled.value = true;
+
   try {
     console.log("开始测试MySQL数据库连接...");
 
-    // 构建MySQL连接URL
-    const connectionUrl = `mysql://${username.value}:${encodeURIComponent(
-      password.value
-    )}@${host.value}:${port.value}/${database.value}`;
-    console.log(`尝试连接: ${connectionUrl.replace(/:[^:]*@/, ":******@")}`); // 隐藏密码
+    if (!database.value) {
+      emit("statusUpdate", "请输入数据库名称", "error");
+      emit("connectionChange", false);
+      isLoading.value = false;
+      return;
+    }
 
-    // 尝试连接数据库
-    const db = await Database.load(connectionUrl);
+    const pass = encodeURIComponent(password.value);
 
-    // 尝试执行简单查询
-    const result = await db.execute("SELECT 1 as connected");
-    console.log("连接测试结果:", result);
+    // 先连接到MySQL的系统数据库information_schema
+    const connServer = `mysql://${username.value}:${pass}@${host.value}:${port.value}/information_schema`;
+    console.log(
+      `尝试连接MySQL服务器: ${connServer.replace(/:[^:]*@/, ":******@")}`
+    );
 
-    // 如果代码能执行到这里，说明连接成功
-    emit("statusUpdate", "数据库连接成功", "success");
-    emit("connectionChange", true);
+    try {
+      // 连接到服务器
+      const serverDb = await Database.load(connServer);
+
+      // 尝试使用不同的查询方式检查数据库是否存在
+      // 直接将数据库名嵌入查询中，避免参数化查询的问题
+      const checkQuery = `SELECT count(*) as count FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '${database.value}'`;
+      const checkResult = await serverDb.select<Array<{ count: number }>>(
+        checkQuery
+      );
+      console.log("数据库检查结果:", JSON.stringify(checkResult, null, 2));
+
+      if (checkResult.length !== 1 || checkResult[0].count !== 1) {
+        emit("statusUpdate", `数据库 '${database.value}' 不存在`, "error");
+        emit("connectionChange", false);
+        isLoading.value = false;
+      } else {
+        emit("statusUpdate", "数据库连接成功", "success");
+        emit("connectionChange", true);
+      }
+    } catch (serverError) {
+      console.error("MySQL服务器连接失败:", serverError);
+      const errorMessage =
+        serverError instanceof Error
+          ? serverError.message
+          : String(serverError);
+      emit("statusUpdate", `连接MySQL服务器错误: ${errorMessage}`, "error");
+      emit("connectionChange", false);
+      isLoading.value = false;
+      return;
+    }
   } catch (error) {
     console.error("MySQL连接测试失败:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
@@ -124,6 +164,12 @@ async function testConnection() {
     emit("connectionChange", false);
   } finally {
     isLoading.value = false;
+    // 测试连接结束后重新启用设置保存
+    // 使用setTimeout确保在watch触发后再启用
+    setTimeout(() => {
+      settingsSaveDisabled.value = false;
+      console.log("已重新启用设置保存功能");
+    }, 100);
   }
 }
 
