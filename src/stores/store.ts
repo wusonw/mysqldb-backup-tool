@@ -7,7 +7,10 @@ import {
   disableAutoStart,
   isAutoStartEnabled,
 } from "../utils/autostart";
-import { backupMysqlDatabase } from "../utils/backup";
+import {
+  backupMysqlDatabase,
+  checkMysqldumpAvailability,
+} from "../utils/backup";
 import { useDateFormat } from "@vueuse/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
 
@@ -35,7 +38,8 @@ interface State {
     backupProgress: number;
     backupStatus: string;
     lastBackupTime: string;
-    mysqldumpAvailable: boolean; // 此字段现在表示"可以进行备份"，不再单指系统mysqldump是否可用
+    mysqldumpAvailable: boolean; // 此字段表示系统中是否有mysqldump命令可用
+    backupEngine: string; // 备份引擎类型：'mysqldump' 或 'builtin'
     currentTableName?: string; // 当前正在备份的表名
   };
 
@@ -96,6 +100,7 @@ export const useStore = defineStore("main", {
       backupStatus: "点击按钮开始备份",
       lastBackupTime: "",
       mysqldumpAvailable: false,
+      backupEngine: "builtin", // 默认使用内置引擎
       currentTableName: undefined,
     },
     system: {
@@ -499,6 +504,7 @@ export const useStore = defineStore("main", {
         await saveSetting("backup.auto", this.backup.auto);
         await saveSetting("backup.frequency", this.backup.frequency);
         await saveSetting("backup.keepCount", this.backup.keepCount);
+        await saveSetting("backup.engine", this.backup.backupEngine);
       } catch (error) {
         console.error("保存备份设置失败:", error);
         this.showSnackbar("保存备份设置失败", "error");
@@ -603,7 +609,8 @@ export const useStore = defineStore("main", {
             this.database.password,
             this.database.database,
             backupFilePath,
-            progressCallback // 传递进度回调函数
+            progressCallback, // 传递进度回调函数
+            this.backup.backupEngine // 传递备份引擎设置
           );
 
           // 备份完成
@@ -651,16 +658,10 @@ export const useStore = defineStore("main", {
       }
     },
 
-    // 检查mysqldump可用性（现在这个函数始终返回true，因为我们实现了内置备份功能）
+    // 检查mysqldump可用性
     async checkMysqldumpAvailability() {
       try {
-        // 由于我们实现了内置备份功能，这个检查总是返回true
-        this.backup.mysqldumpAvailable = true;
-        console.log("备份功能已就绪");
-        return true;
-
-        // 下面代码保留仅作参考
-        /*
+        // 调用实际的命令检查mysqldump是否可用
         this.backup.mysqldumpAvailable = await checkMysqldumpAvailability();
         console.log(
           `mysqldump可用性: ${
@@ -668,11 +669,10 @@ export const useStore = defineStore("main", {
           }`
         );
         return this.backup.mysqldumpAvailable;
-        */
       } catch (error) {
-        console.error("检查备份功能可用性失败:", error);
-        this.backup.mysqldumpAvailable = true; // 依然设为true，因为我们有内置备份功能
-        return true;
+        console.error("检查mysqldump可用性失败:", error);
+        this.backup.mysqldumpAvailable = false;
+        return false;
       }
     },
 
@@ -792,6 +792,20 @@ export const useStore = defineStore("main", {
         this.backup.frequency = await getSetting("backup.frequency", "daily");
         this.backup.keepCount = await getSetting("backup.keepCount", 5);
 
+        // 检查mysqldump可用性
+        await this.checkMysqldumpAvailability();
+
+        // 加载备份引擎设置（如果mysqldump不可用，则强制使用内置引擎）
+        this.backup.backupEngine = await getSetting("backup.engine", "builtin");
+        if (
+          !this.backup.mysqldumpAvailable &&
+          this.backup.backupEngine === "mysqldump"
+        ) {
+          console.log("系统中没有mysqldump可用，强制使用内置引擎");
+          this.backup.backupEngine = "builtin";
+          await saveSetting("backup.engine", "builtin");
+        }
+
         // 加载上次备份时间
         const savedLastBackupTime = await getSetting<string>(
           "lastBackupTime",
@@ -802,9 +816,6 @@ export const useStore = defineStore("main", {
         }
 
         console.log("所有设置加载完成");
-
-        // 检查mysqldump可用性
-        await this.checkMysqldumpAvailability();
 
         // 启动数据库连接状态监控
         this.startConnectionMonitor();

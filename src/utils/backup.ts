@@ -18,6 +18,7 @@ export type ProgressCallback = (
  * @param database 要备份的数据库名
  * @param outputPath 备份文件输出路径
  * @param progressCallback 进度更新回调函数
+ * @param engine 备份引擎类型，'mysqldump'或'builtin'
  * @returns 成功时返回备份文件路径，失败时抛出错误
  */
 export async function backupMysqlDatabase(
@@ -27,12 +28,15 @@ export async function backupMysqlDatabase(
   password: string,
   database: string,
   outputPath: string,
-  progressCallback?: ProgressCallback
+  progressCallback?: ProgressCallback,
+  engine?: string
 ): Promise<string> {
   try {
     console.log(`开始备份MySQL数据库: ${database}`);
     console.log(
-      `参数: ${host}:${port}, 用户: ${username}, 输出: ${outputPath}`
+      `参数: ${host}:${port}, 用户: ${username}, 输出: ${outputPath}, 引擎: ${
+        engine || "自动"
+      }`
     );
 
     // 注册进度更新事件监听器
@@ -63,6 +67,7 @@ export async function backupMysqlDatabase(
       password,
       database,
       outputPath,
+      engine, // 传递备份引擎参数
     });
 
     // 移除事件监听器
@@ -89,8 +94,7 @@ export async function checkMysqldumpAvailability(): Promise<boolean> {
     const result = await invoke<boolean>("check_mysqldump_availability");
     return result;
   } catch (error) {
-    console.error("检查备份功能可用性失败:", error);
-    // 即使发生错误，由于我们有内置备份功能，也返回true
-    return true;
+    console.error("检查mysqldump可用性失败:", error);
+    return false;
   }
 }

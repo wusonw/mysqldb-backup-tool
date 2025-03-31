@@ -44,33 +44,67 @@ fn backup_mysql(
     password: &str,
     database: &str,
     output_path: &str,
+    engine: Option<&str>,
 ) -> Result<String, String> {
     // 首先发送开始事件
     send_progress_update(&window, 0, "正在准备备份...", None);
 
-    // 首先尝试使用系统中安装的mysqldump
-    if is_mysqldump_available() {
-        return backup_with_mysqldump(
-            window,
-            host,
-            port,
-            username,
-            password,
-            database,
-            output_path,
-        );
+    // 根据指定的引擎或可用性选择备份方法
+    match engine {
+        // 如果明确指定使用mysqldump
+        Some("mysqldump") => {
+            if is_mysqldump_available() {
+                return backup_with_mysqldump(
+                    window,
+                    host,
+                    port,
+                    username,
+                    password,
+                    database,
+                    output_path,
+                );
+            } else {
+                // 如果指定了mysqldump但它不可用，返回错误
+                return Err("指定使用mysqldump但系统中没有可用的mysqldump命令".to_string());
+            }
+        }
+        // 如果明确指定使用内置引擎
+        Some("builtin") => {
+            return backup_with_rust_mysql(
+                window,
+                host,
+                port,
+                username,
+                password,
+                database,
+                output_path,
+            );
+        }
+        // 如果没有指定或指定了其他值，使用自动选择逻辑
+        _ => {
+            if is_mysqldump_available() {
+                return backup_with_mysqldump(
+                    window,
+                    host,
+                    port,
+                    username,
+                    password,
+                    database,
+                    output_path,
+                );
+            } else {
+                return backup_with_rust_mysql(
+                    window,
+                    host,
+                    port,
+                    username,
+                    password,
+                    database,
+                    output_path,
+                );
+            }
+        }
     }
-
-    // 如果系统中没有安装mysqldump，使用内置的MySQL备份功能
-    return backup_with_rust_mysql(
-        window,
-        host,
-        port,
-        username,
-        password,
-        database,
-        output_path,
-    );
 }
 
 // 检查系统中是否有mysqldump可用
@@ -688,8 +722,8 @@ fn get_escaped_value(row: &mysql::Row, column_name: &str) -> Result<String, Stri
 
 #[command]
 fn check_mysqldump_availability() -> bool {
-    // 现在总是返回true，因为我们有内置的备份功能
-    true
+    // 返回是否有mysqldump可用
+    is_mysqldump_available()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
