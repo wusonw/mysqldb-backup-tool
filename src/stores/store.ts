@@ -8,6 +8,7 @@ import {
   isAutoStartEnabled,
 } from "../utils/autostart";
 import { backupMysqlDatabase } from "../utils/backup";
+import { useDateFormat } from "@vueuse/core";
 
 // 定义Store的状态接口
 interface State {
@@ -383,13 +384,9 @@ export const useStore = defineStore("main", {
     // 生成唯一的备份文件名
     generateBackupFileName(): string {
       const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, "0");
-      const day = String(now.getDate()).padStart(2, "0");
-      const hour = String(now.getHours()).padStart(2, "0");
-      const minute = String(now.getMinutes()).padStart(2, "0");
-      const formattedDate = `${year}${month}${day}${hour}${minute}`;
-      return `mysql_backup_${formattedDate}.zip`;
+      // 使用 useDateFormat 格式化日期为 YYYYMMDDHHmm 格式
+      const timestamp = useDateFormat(now, "YYYYMMDDHHmm").value;
+      return `BACKUP_${timestamp}.zip`;
     },
 
     // 生成完整的备份文件路径
