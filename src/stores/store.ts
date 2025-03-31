@@ -7,6 +7,7 @@ import {
   disableAutoStart,
   isAutoStartEnabled,
 } from "../utils/autostart";
+import { backupMysqlDatabase } from "../utils/backup";
 
 // 定义Store的状态接口
 interface State {
@@ -32,6 +33,7 @@ interface State {
     backupProgress: number;
     backupStatus: string;
     lastBackupTime: string;
+    mysqldumpAvailable: boolean; // 此字段现在表示"可以进行备份"，不再单指系统mysqldump是否可用
   };
 
   // 系统设置
@@ -88,6 +90,7 @@ export const useStore = defineStore("main", {
       backupProgress: 0,
       backupStatus: "点击按钮开始备份",
       lastBackupTime: "",
+      mysqldumpAvailable: false,
     },
     system: {
       darkMode: false,
@@ -433,6 +436,19 @@ export const useStore = defineStore("main", {
         return;
       }
 
+      // 我们已经实现了内置备份功能，所以不再需要检查mysqldump是否可用
+      // 下面代码保留仅作参考
+      /*
+      // 检查mysqldump是否可用
+      if (!this.backup.mysqldumpAvailable) {
+        this.showSnackbar(
+          "无法执行备份：未检测到mysqldump工具，请确保MySQL已安装且mysqldump在系统PATH中",
+          "error"
+        );
+        return;
+      }
+      */
+
       try {
         // 重置状态
         this.backup.isBackingUp = true;
@@ -443,30 +459,64 @@ export const useStore = defineStore("main", {
         const backupFilePath = this.getBackupFilePath();
         console.log(`备份文件将保存到: ${backupFilePath}`);
 
-        // 在生产环境中，这里应该调用Tauri的API进行真实的MySQL备份
-        // 现在模拟备份过程
-        for (let i = 0; i <= 100; i += 10) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
-          this.updateBackupProgress(i);
+        this.updateBackupProgress(10); // 初始进度10%
+
+        // 执行MySQL备份
+        try {
+          await backupMysqlDatabase(
+            this.database.host,
+            this.database.port,
+            this.database.username,
+            this.database.password,
+            this.database.database,
+            backupFilePath
+          );
+
+          this.updateBackupProgress(100); // 备份完成，进度100%
+          this.backup.backupStatus = "备份完成";
+          this.backup.lastBackupTime = new Date().toLocaleString();
+
+          // 保存最后备份时间到数据库
+          await saveSetting("lastBackupTime", this.backup.lastBackupTime);
+
+          this.showSnackbar(
+            `数据库备份成功，已保存到:\n${backupFilePath}`,
+            "success"
+          );
+        } catch (error) {
+          throw new Error(`MySQL备份失败: ${error}`);
         }
-
-        this.backup.backupStatus = "备份完成";
-        this.backup.backupProgress = 100;
-        this.backup.lastBackupTime = new Date().toLocaleString();
-
-        // 保存最后备份时间到数据库
-        await saveSetting("lastBackupTime", this.backup.lastBackupTime);
-
-        this.showSnackbar(
-          `数据库备份成功，已保存到:\n${backupFilePath}`,
-          "success"
-        );
       } catch (error) {
         this.backup.backupStatus = "备份出错";
         this.backup.backupProgress = 0;
         this.showSnackbar(`备份错误: ${error}`, "error");
       } finally {
         this.backup.isBackingUp = false;
+      }
+    },
+
+    // 检查mysqldump可用性（现在这个函数始终返回true，因为我们实现了内置备份功能）
+    async checkMysqldumpAvailability() {
+      try {
+        // 由于我们实现了内置备份功能，这个检查总是返回true
+        this.backup.mysqldumpAvailable = true;
+        console.log("备份功能已就绪");
+        return true;
+
+        // 下面代码保留仅作参考
+        /*
+        this.backup.mysqldumpAvailable = await checkMysqldumpAvailability();
+        console.log(
+          `mysqldump可用性: ${
+            this.backup.mysqldumpAvailable ? "可用" : "不可用"
+          }`
+        );
+        return this.backup.mysqldumpAvailable;
+        */
+      } catch (error) {
+        console.error("检查备份功能可用性失败:", error);
+        this.backup.mysqldumpAvailable = true; // 依然设为true，因为我们有内置备份功能
+        return true;
       }
     },
 
@@ -596,6 +646,9 @@ export const useStore = defineStore("main", {
         }
 
         console.log("所有设置加载完成");
+
+        // 检查mysqldump可用性
+        await this.checkMysqldumpAvailability();
 
         // 启动数据库连接状态监控
         this.startConnectionMonitor();
