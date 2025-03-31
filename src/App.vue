@@ -1,13 +1,27 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed } from "vue";
+import { onMounted, onUnmounted, computed, watch } from "vue";
 import Settings from "./components/Settings.vue";
 import { useStore } from "./stores/store";
+import { useTheme } from "vuetify";
 
 // 使用Pinia Store
 const store = useStore();
+// 使用Vuetify主题
+const theme = useTheme();
 
 // 计算属性：是否显示备份进度
 const showProgress = computed(() => store.showProgress);
+
+// 监听深色模式变化，实时应用主题
+watch(
+  () => store.system.darkMode,
+  (isDarkMode) => {
+    // 切换Vuetify主题
+    theme.global.name.value = isDarkMode ? "dark" : "light";
+    console.log(`主题已切换为: ${isDarkMode ? "深色模式" : "浅色模式"}`);
+  },
+  { immediate: true } // 立即执行一次，确保初始化时应用正确的主题
+);
 
 // 初始化
 onMounted(async () => {

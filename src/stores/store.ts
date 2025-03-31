@@ -440,6 +440,17 @@ export const useStore = defineStore("main", {
 
     // 系统设置操作 ==============================================
 
+    // 同步主题模式状态（供组件使用）
+    syncThemeMode() {
+      return this.system.darkMode;
+    },
+
+    // 切换主题模式
+    toggleDarkMode(value: boolean) {
+      this.system.darkMode = value;
+      this.saveSystemSettings();
+    },
+
     // 保存系统设置
     async saveSystemSettings() {
       try {
