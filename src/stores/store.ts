@@ -383,13 +383,13 @@ export const useStore = defineStore("main", {
     // 生成唯一的备份文件名
     generateBackupFileName(): string {
       const now = new Date();
-      const dateStr = now.toISOString().replace(/[:.]/g, "-").split("T")[0];
-      const timeStr = now
-        .toISOString()
-        .replace(/[:.]/g, "-")
-        .split("T")[1]
-        .split(".")[0];
-      return `mysql_backup_${dateStr}_${timeStr}.sql`;
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const day = String(now.getDate()).padStart(2, "0");
+      const hour = String(now.getHours()).padStart(2, "0");
+      const minute = String(now.getMinutes()).padStart(2, "0");
+      const formattedDate = `${year}${month}${day}${hour}${minute}`;
+      return `mysql_backup_${formattedDate}.zip`;
     },
 
     // 生成完整的备份文件路径

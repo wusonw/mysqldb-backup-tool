@@ -28,6 +28,8 @@ tauri-plugin-sql = { version = "2", features = ["mysql"] }
 tauri-plugin-store = "2"
 mysql = "24.0.0"
 hex = "0.4.3"
+zip = "0.6.6"
+tempfile = "3.8.1"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

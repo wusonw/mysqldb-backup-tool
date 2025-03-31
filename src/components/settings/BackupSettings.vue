@@ -53,6 +53,9 @@ const selectBackupPath = async () => {
           <div class="text-body-2">
             应用内置了MySQL备份功能，无需依赖外部mysqldump工具
           </div>
+          <div class="text-body-2 mt-1">
+            备份将为每个表创建单独的SQL文件，并打包为ZIP格式
+          </div>
         </div>
       </div>
     </v-alert>

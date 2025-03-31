@@ -2,10 +2,13 @@
 use hex;
 use mysql::{prelude::*, OptsBuilder, Pool, PooledConn};
 use std::fs;
+use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use tauri::command;
+use tempfile::TempDir;
+use zip::write::{FileOptions, ZipWriter};
 
 #[command]
 fn backup_mysql(
@@ -67,6 +70,16 @@ fn backup_with_mysqldump(
         }
     }
 
+    // 创建临时目录用于存放mysqldump生成的SQL文件
+    let temp_dir = match TempDir::new() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("创建临时目录失败: {}", e)),
+    };
+
+    // 获取临时SQL文件路径
+    let sql_file_path = temp_dir.path().join("full_backup.sql");
+    let sql_file_path_str = sql_file_path.to_string_lossy().to_string();
+
     // 构建 mysqldump 命令
     let mut cmd = Command::new("mysqldump");
     cmd.arg(format!("--host={}", host))
@@ -88,14 +101,12 @@ fn backup_with_mysqldump(
         .arg("--databases")
         .arg(database)
         .arg("--result-file")
-        .arg(output_path);
+        .arg(&sql_file_path_str);
 
     // 执行命令
     match cmd.output() {
         Ok(output) => {
-            if output.status.success() {
-                return Ok(output_path.to_string());
-            } else {
+            if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 return Err(format!("备份失败: {}", stderr));
             }
@@ -104,6 +115,38 @@ fn backup_with_mysqldump(
             return Err(format!("执行mysqldump命令失败: {}", e));
         }
     }
+
+    // 创建ZIP文件
+    let zip_file = match File::create(output_path) {
+        Ok(file) => file,
+        Err(e) => return Err(format!("创建ZIP文件失败: {}", e)),
+    };
+
+    let mut zip = ZipWriter::new(zip_file);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    // 添加SQL文件到ZIP
+    if let Err(e) = zip.start_file("mysqldump_backup.sql", options) {
+        return Err(format!("添加备份文件到ZIP失败: {}", e));
+    }
+
+    let sql_content = match fs::read(&sql_file_path) {
+        Ok(content) => content,
+        Err(e) => return Err(format!("读取备份文件失败: {}", e)),
+    };
+
+    if let Err(e) = zip.write_all(&sql_content) {
+        return Err(format!("写入备份数据到ZIP失败: {}", e));
+    }
+
+    // 完成ZIP文件
+    if let Err(e) = zip.finish() {
+        return Err(format!("完成ZIP文件失败: {}", e));
+    }
+
+    Ok(output_path.to_string())
 }
 
 // 使用Rust MySQL库进行备份（内置备份方式）
@@ -115,14 +158,23 @@ fn backup_with_rust_mysql(
     database: &str,
     output_path: &str,
 ) -> Result<String, String> {
+    // 检查输出路径
+    let output_file_path = Path::new(output_path);
+
     // 确保输出目录存在
-    if let Some(parent) = Path::new(output_path).parent() {
+    if let Some(parent) = output_file_path.parent() {
         if !parent.exists() {
             if let Err(e) = fs::create_dir_all(parent) {
                 return Err(format!("创建输出目录失败: {}", e));
             }
         }
     }
+
+    // 创建临时目录用于存放每个表的备份文件
+    let temp_dir = match TempDir::new() {
+        Ok(dir) => dir,
+        Err(e) => return Err(format!("创建临时目录失败: {}", e)),
+    };
 
     // 构建连接选项
     let opts = OptsBuilder::new()
@@ -144,20 +196,21 @@ fn backup_with_rust_mysql(
         Err(e) => return Err(format!("获取数据库连接失败: {}", e)),
     };
 
-    // 打开输出文件
-    let mut output_file = match fs::File::create(output_path) {
+    // 创建数据库信息文件
+    let db_info_path = temp_dir.path().join("00_database_info.sql");
+    let mut db_info_file = match File::create(&db_info_path) {
         Ok(file) => file,
-        Err(e) => return Err(format!("创建输出文件失败: {}", e)),
+        Err(e) => return Err(format!("创建数据库信息文件失败: {}", e)),
     };
 
-    // 写入SQL文件头
-    if let Err(e) = writeln!(output_file, "-- MySQL dump by Rust mysql-client") {
+    // 写入数据库信息
+    if let Err(e) = writeln!(db_info_file, "-- MySQL dump by Rust mysql-client") {
         return Err(format!("写入文件失败: {}", e));
     }
-    if let Err(e) = writeln!(output_file, "-- Database: {}", database) {
+    if let Err(e) = writeln!(db_info_file, "-- Database: {}", database) {
         return Err(format!("写入文件失败: {}", e));
     }
-    if let Err(e) = writeln!(output_file, "\n-- 开始备份\n") {
+    if let Err(e) = writeln!(db_info_file, "\n-- 创建数据库\nCREATE DATABASE IF NOT EXISTS `{}` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;\nUSE `{}`;\n", database, database) {
         return Err(format!("写入文件失败: {}", e));
     }
 
@@ -169,20 +222,74 @@ fn backup_with_rust_mysql(
 
     // 遍历每张表进行备份
     for table in &tables {
+        let table_file_name = format!("table_{}.sql", table);
+        let table_file_path = temp_dir.path().join(&table_file_name);
+
+        // 创建表备份文件
+        let mut table_file = match File::create(&table_file_path) {
+            Ok(file) => file,
+            Err(e) => return Err(format!("创建表备份文件失败: {}", e)),
+        };
+
         // 备份表结构
-        if let Err(e) = backup_table_structure(&mut conn, &mut output_file, table) {
+        if let Err(e) = backup_table_structure(&mut conn, &mut table_file, table) {
             return Err(e);
         }
 
         // 备份表数据
-        if let Err(e) = backup_table_data(&mut conn, &mut output_file, table) {
+        if let Err(e) = backup_table_data(&mut conn, &mut table_file, table) {
             return Err(e);
         }
     }
 
-    // 写入SQL文件尾
-    if let Err(e) = writeln!(output_file, "\n-- 备份完成\n") {
-        return Err(format!("写入文件失败: {}", e));
+    // 创建ZIP文件
+    let zip_file = match File::create(output_path) {
+        Ok(file) => file,
+        Err(e) => return Err(format!("创建ZIP文件失败: {}", e)),
+    };
+
+    let mut zip = ZipWriter::new(zip_file);
+    let options = FileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated)
+        .unix_permissions(0o755);
+
+    // 首先添加数据库信息文件
+    if let Err(e) = zip.start_file("00_database_info.sql", options) {
+        return Err(format!("添加数据库信息到ZIP失败: {}", e));
+    }
+
+    let db_info_content = match fs::read(&db_info_path) {
+        Ok(content) => content,
+        Err(e) => return Err(format!("读取数据库信息文件失败: {}", e)),
+    };
+
+    if let Err(e) = zip.write_all(&db_info_content) {
+        return Err(format!("写入数据库信息到ZIP失败: {}", e));
+    }
+
+    // 添加所有表文件到ZIP
+    for table in &tables {
+        let table_file_name = format!("table_{}.sql", table);
+        let table_file_path = temp_dir.path().join(&table_file_name);
+
+        // 添加到ZIP
+        if let Err(e) = zip.start_file(&table_file_name, options) {
+            return Err(format!("添加表文件到ZIP失败: {}", e));
+        }
+
+        let table_content = match fs::read(&table_file_path) {
+            Ok(content) => content,
+            Err(e) => return Err(format!("读取表备份文件失败: {}", e)),
+        };
+
+        if let Err(e) = zip.write_all(&table_content) {
+            return Err(format!("写入表数据到ZIP失败: {}", e));
+        }
+    }
+
+    // 完成ZIP文件
+    if let Err(e) = zip.finish() {
+        return Err(format!("完成ZIP文件失败: {}", e));
     }
 
     Ok(output_path.to_string())
