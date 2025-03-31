@@ -2,6 +2,11 @@ import { defineStore } from "pinia";
 import { saveSetting, getSetting } from "../utils/database";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-shell";
+import {
+  enableAutoStart,
+  disableAutoStart,
+  isAutoStartEnabled,
+} from "../utils/autostart";
 
 // 定义Store的状态接口
 interface State {
@@ -451,11 +456,67 @@ export const useStore = defineStore("main", {
       this.saveSystemSettings();
     },
 
+    // 更新开机自启动状态
+    async updateAutoStart(enabled: boolean) {
+      try {
+        // 调用自启动工具设置实际的系统自启动
+        if (enabled) {
+          const success = await enableAutoStart();
+          if (!success) {
+            throw new Error("启用开机自启动失败");
+          }
+        } else {
+          const success = await disableAutoStart();
+          if (!success) {
+            throw new Error("禁用开机自启动失败");
+          }
+        }
+
+        // 更新状态(仅UI显示用)
+        this.system.autoStart = enabled;
+
+        // 显示通知
+        this.showSnackbar(
+          `${enabled ? "已启用" : "已禁用"}开机自启动`,
+          "success"
+        );
+
+        return true;
+      } catch (error) {
+        console.error("设置开机自启动失败:", error);
+        this.showSnackbar("设置开机自启动失败: " + error, "error");
+
+        // 恢复UI状态，重新获取实际状态
+        this.refreshAutoStartState();
+
+        return false;
+      }
+    },
+
+    // 刷新自启动状态（仅更新UI显示）
+    async refreshAutoStartState() {
+      try {
+        // 获取系统中的实际自启动状态
+        const systemAutoStart = await isAutoStartEnabled();
+
+        // 更新UI状态
+        this.system.autoStart = systemAutoStart;
+
+        console.log(
+          `自启动状态已刷新: ${this.system.autoStart ? "已启用" : "已禁用"}`
+        );
+        return true;
+      } catch (error) {
+        console.error("刷新自启动状态失败:", error);
+        return false;
+      }
+    },
+
     // 保存系统设置
     async saveSystemSettings() {
       try {
         await saveSetting("system.darkMode", this.system.darkMode);
-        await saveSetting("system.autoStart", this.system.autoStart);
+        // 不再保存autoStart到数据库，由Tauri插件管理
         await saveSetting("system.minimizeToTray", this.system.minimizeToTray);
       } catch (error) {
         console.error("保存系统设置失败:", error);
@@ -468,7 +529,8 @@ export const useStore = defineStore("main", {
       try {
         // 加载系统设置
         this.system.darkMode = await getSetting("system.darkMode", false);
-        this.system.autoStart = await getSetting("system.autoStart", false);
+        // 从系统实际状态获取自启动设置，而不是从数据库
+        this.system.autoStart = await isAutoStartEnabled();
         this.system.minimizeToTray = await getSetting(
           "system.minimizeToTray",
           true

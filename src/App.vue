@@ -27,6 +27,7 @@ watch(
 onMounted(async () => {
   // 初始化所有设置并启动连接监控
   await store.initializeSettings();
+  store.checkConnectionStatus();
 });
 
 // 组件卸载时清除定时器
