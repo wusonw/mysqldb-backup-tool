@@ -10,6 +10,7 @@ import {
 import {
   backupMysqlDatabase,
   checkMysqldumpAvailability,
+  cleanupOldBackups,
 } from "../utils/backup";
 import { useDateFormat } from "@vueuse/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
@@ -33,7 +34,7 @@ interface State {
     path: string;
     auto: boolean;
     frequency: string;
-    keepCount: number;
+    keepDays: number; // 保留备份天数，0或负数表示不限制保留期限
     isBackingUp: boolean;
     backupProgress: number;
     backupStatus: string;
@@ -94,7 +95,7 @@ export const useStore = defineStore("main", {
       path: "",
       auto: false,
       frequency: "daily",
-      keepCount: 5,
+      keepDays: 180, // 默认保留180天
       isBackingUp: false,
       backupProgress: 0,
       backupStatus: "点击按钮开始备份",
@@ -503,7 +504,7 @@ export const useStore = defineStore("main", {
         await saveSetting("backup.path", this.backup.path);
         await saveSetting("backup.auto", this.backup.auto);
         await saveSetting("backup.frequency", this.backup.frequency);
-        await saveSetting("backup.keepCount", this.backup.keepCount);
+        await saveSetting("backup.keepDays", this.backup.keepDays);
         await saveSetting("backup.engine", this.backup.backupEngine);
       } catch (error) {
         console.error("保存备份设置失败:", error);
@@ -620,6 +621,20 @@ export const useStore = defineStore("main", {
 
           // 保存最后备份时间到数据库
           await saveSetting("lastBackupTime", this.backup.lastBackupTime);
+
+          // 清理旧备份文件
+          try {
+            const deletedCount = await cleanupOldBackups(
+              this.backup.path,
+              this.backup.keepDays
+            );
+            if (deletedCount > 0) {
+              console.log(`已清理 ${deletedCount} 个过期备份文件`);
+            }
+          } catch (cleanupError) {
+            console.error("清理旧备份文件失败:", cleanupError);
+            // 清理失败不影响备份流程，所以不抛出错误
+          }
 
           // 显示成功提示
           this.showSnackbar(
@@ -790,7 +805,7 @@ export const useStore = defineStore("main", {
         this.backup.path = await getSetting("backup.path", "");
         this.backup.auto = await getSetting("backup.auto", false);
         this.backup.frequency = await getSetting("backup.frequency", "daily");
-        this.backup.keepCount = await getSetting("backup.keepCount", 5);
+        this.backup.keepDays = await getSetting("backup.keepDays", 180);
 
         // 检查mysqldump可用性
         await this.checkMysqldumpAvailability();

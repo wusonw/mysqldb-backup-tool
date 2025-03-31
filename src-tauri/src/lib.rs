@@ -726,6 +726,76 @@ fn check_mysqldump_availability() -> bool {
     is_mysqldump_available()
 }
 
+// 清理旧备份文件
+#[command]
+fn cleanup_old_backups(backup_dir: &str, keep_days: i32) -> Result<usize, String> {
+    // 如果keep_days小于等于0，表示不限制保留期，不删除任何文件
+    if keep_days <= 0 {
+        println!("备份保留天数设置为不限制，跳过清理");
+        return Ok(0);
+    }
+
+    let path = Path::new(backup_dir);
+
+    // 检查路径是否存在且是目录
+    if !path.exists() || !path.is_dir() {
+        return Err(format!("备份目录 {} 不存在或不是有效目录", backup_dir));
+    }
+
+    // 计算截止日期（当前时间减去保留天数）
+    let now = std::time::SystemTime::now();
+    let keep_duration = std::time::Duration::from_secs(keep_days as u64 * 24 * 60 * 60);
+
+    let cutoff_time = match now.checked_sub(keep_duration) {
+        Some(time) => time,
+        None => return Err("计算截止日期时出错".to_string()),
+    };
+
+    let mut deleted_count = 0;
+
+    // 遍历目录中的所有文件
+    for entry_result in fs::read_dir(path).map_err(|e| format!("读取目录失败: {}", e))? {
+        let entry = entry_result.map_err(|e| format!("读取目录项失败: {}", e))?;
+        let file_path = entry.path();
+
+        // 只处理文件且文件名以BACKUP_开头且以.zip结尾的文件
+        if file_path.is_file() {
+            let file_name = match file_path.file_name() {
+                Some(name) => name.to_string_lossy().to_string(),
+                None => continue,
+            };
+
+            if file_name.starts_with("BACKUP_") && file_name.ends_with(".zip") {
+                // 获取文件修改时间
+                let metadata = match fs::metadata(&file_path) {
+                    Ok(meta) => meta,
+                    Err(_) => continue,
+                };
+
+                let modified_time = match metadata.modified() {
+                    Ok(time) => time,
+                    Err(_) => continue,
+                };
+
+                // 如果文件修改时间早于截止时间，删除它
+                if modified_time <= cutoff_time {
+                    match fs::remove_file(&file_path) {
+                        Ok(_) => {
+                            println!("已删除过期备份文件: {:?}", file_path);
+                            deleted_count += 1;
+                        }
+                        Err(e) => {
+                            eprintln!("删除文件 {:?} 失败: {}", file_path, e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(deleted_count)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -740,7 +810,8 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             backup_mysql,
-            check_mysqldump_availability
+            check_mysqldump_availability,
+            cleanup_old_backups
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

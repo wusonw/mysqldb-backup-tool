@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useStore } from "../../stores/store";
 import { open } from "@tauri-apps/plugin-dialog";
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 
 // 使用Pinia Store
 const store = useStore();
@@ -12,6 +12,30 @@ const mysqldumpStatusText = computed(() => {
     ? "系统中已安装"
     : "系统中未安装，无法使用";
 });
+
+// 是否不限制保留天数
+const unlimitedRetention = ref(store.backup.keepDays <= 0);
+
+// 监听不限制保留天数开关变化
+watch(unlimitedRetention, (newValue) => {
+  if (newValue) {
+    // 如果启用不限制，将保留天数设为0（特殊值，表示不限制）
+    store.backup.keepDays = 0;
+  } else if (store.backup.keepDays <= 0) {
+    // 如果禁用不限制，且当前值小于等于0，设置为默认值
+    store.backup.keepDays = 180;
+  }
+  store.saveBackupSettings();
+});
+
+// 监听保留天数变化
+watch(
+  () => store.backup.keepDays,
+  (newValue) => {
+    // 保持unlimitedRetention开关状态与keepDays值同步
+    unlimitedRetention.value = newValue <= 0;
+  }
+);
 
 // 定义props - 只接收备份频率选项
 defineProps({
@@ -130,37 +154,62 @@ const selectBackupPath = async () => {
       @update:model-value="store.saveBackupSettings"
     ></v-text-field>
 
-    <v-switch
-      v-model="store.backup.auto"
-      label="启用自动备份"
-      color="primary"
-      hide-details
-      class="mb-3"
-      @update:model-value="store.saveBackupSettings"
-    ></v-switch>
+    <!-- 自动备份和频率设置区 -->
+    <div class="d-flex align-center mb-3 auto-backup-container">
+      <div class="switch-container">
+        <v-switch
+          v-model="store.backup.auto"
+          label="自动备份"
+          color="primary"
+          hide-details
+          density="compact"
+          class="backup-switch"
+          inset
+          @update:model-value="store.saveBackupSettings"
+        ></v-switch>
+      </div>
 
-    <v-select
-      v-model="store.backup.frequency"
-      label="备份频率"
-      :items="backupFrequencies"
-      variant="outlined"
-      hide-details="auto"
-      :disabled="!store.backup.auto"
-      class="mb-3"
-      @update:model-value="store.saveBackupSettings"
-    ></v-select>
+      <div class="input-container">
+        <v-select
+          v-model="store.backup.frequency"
+          label="备份频率"
+          :items="backupFrequencies"
+          variant="outlined"
+          hide-details="auto"
+          :disabled="!store.backup.auto"
+          @update:model-value="store.saveBackupSettings"
+        ></v-select>
+      </div>
+    </div>
 
-    <v-number-input
-      v-model.number="store.backup.keepCount"
-      label="保留备份数量"
-      variant="outlined"
-      hide-details="auto"
-      class="mb-3"
-      type="number"
-      :min="1"
-      :max="100"
-      @update:model-value="store.saveBackupSettings"
-    ></v-number-input>
+    <!-- 保留天数设置区 -->
+    <div class="d-flex align-center mb-3 retention-setting-container">
+      <div class="switch-container">
+        <v-switch
+          v-model="unlimitedRetention"
+          label="永久保留"
+          color="primary"
+          hide-details
+          density="compact"
+          class="retention-switch"
+          inset
+        ></v-switch>
+      </div>
+
+      <div class="input-container">
+        <v-number-input
+          v-model.number="store.backup.keepDays"
+          :label="unlimitedRetention ? '已禁用天数限制' : '保留备份天数'"
+          variant="outlined"
+          hide-details="auto"
+          type="number"
+          :disabled="unlimitedRetention"
+          :min="1"
+          :max="3650"
+          @update:model-value="store.saveBackupSettings"
+        ></v-number-input>
+      </div>
+    </div>
   </v-form>
 </template>
 
@@ -168,5 +217,32 @@ const selectBackupPath = async () => {
 .engine-description {
   background-color: rgba(var(--v-theme-on-surface), 0.04);
   border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+}
+
+.retention-setting-container,
+.auto-backup-container {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+}
+
+.switch-container {
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.input-container {
+  flex-grow: 1;
+}
+
+.retention-switch :deep(.v-switch__track),
+.backup-switch :deep(.v-switch__track) {
+  opacity: 0.8;
+}
+
+.retention-switch :deep(.v-label),
+.backup-switch :deep(.v-label) {
+  opacity: 0.9;
+  font-size: 0.875rem;
 }
 </style>

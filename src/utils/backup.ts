@@ -98,3 +98,32 @@ export async function checkMysqldumpAvailability(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * 清理过期的备份文件
+ * @param backupDir 备份文件所在目录
+ * @param keepDays 保留天数，当为0或负数时表示不限制保留天数
+ * @returns 删除的文件数量
+ */
+export async function cleanupOldBackups(
+  backupDir: string,
+  keepDays: number
+): Promise<number> {
+  try {
+    if (keepDays <= 0) {
+      console.log("备份保留天数设置为不限制，跳过清理");
+      return 0;
+    }
+
+    console.log(`开始清理过期备份，保留 ${keepDays} 天内的备份文件`);
+    const deletedCount = await invoke<number>("cleanup_old_backups", {
+      backupDir,
+      keepDays,
+    });
+    console.log(`清理完成，共删除 ${deletedCount} 个过期备份文件`);
+    return deletedCount;
+  } catch (error) {
+    console.error("清理过期备份失败:", error);
+    throw error;
+  }
+}
