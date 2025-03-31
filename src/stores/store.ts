@@ -1,5 +1,5 @@
 import { defineStore } from "pinia";
-import { saveSetting, getSetting } from "../utils/database";
+import { saveSetting, getSetting } from "../utils/store";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-shell";
 import {
@@ -151,21 +151,48 @@ export const useStore = defineStore("main", {
 
       try {
         console.log("开始保存数据库设置...");
-        await saveSetting("database.host", this.database.host);
-        await saveSetting("database.port", this.database.port);
-        await saveSetting("database.username", this.database.username);
 
-        // 特别处理密码保存
-        console.log("准备保存密码:", this.database.password);
-        await saveSetting("database.password", this.database.password);
-        console.log("密码已保存");
+        // 构建数据库连接URL
+        const password = encodeURIComponent(this.database.password);
+        const connectionUrl = `mysql://${this.database.username}:${password}@${this.database.host}:${this.database.port}/${this.database.database}`;
 
-        await saveSetting("database.database", this.database.database);
+        // 保存加密的连接URL
+        console.log("准备保存数据库连接URL");
+        await saveSetting("database.connectionUrl", connectionUrl);
+        console.log("数据库连接URL已保存");
 
         console.log("数据库设置已保存");
       } catch (error) {
         console.error("保存数据库设置失败:", error);
         this.showSnackbar("保存数据库设置失败", "error");
+      }
+    },
+
+    // 解析数据库连接URL为各个组件
+    parseConnectionUrl(url: string) {
+      try {
+        if (!url) return;
+
+        console.log("解析数据库连接URL:", url);
+
+        // 解析URL
+        const connectionRegex =
+          /mysql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.*)$/;
+        const match = url.match(connectionRegex);
+
+        if (match) {
+          this.database.username = match[1];
+          this.database.password = decodeURIComponent(match[2]);
+          this.database.host = match[3];
+          this.database.port = parseInt(match[4]);
+          this.database.database = match[5] || "";
+
+          console.log("成功解析数据库连接URL");
+        } else {
+          console.error("无法解析连接URL:", url);
+        }
+      } catch (error) {
+        console.error("解析数据库连接URL失败:", error);
       }
     },
 
@@ -536,12 +563,22 @@ export const useStore = defineStore("main", {
           true
         );
 
-        // 加载数据库设置
-        this.database.host = await getSetting("database.host", "localhost");
-        this.database.port = await getSetting("database.port", 3306);
-        this.database.username = await getSetting("database.username", "root");
-        this.database.password = await getSetting("database.password", "");
-        this.database.database = await getSetting("database.database", "");
+        // 加载数据库连接设置
+        const connectionUrl = await getSetting<string>(
+          "database.connectionUrl",
+          ""
+        );
+        if (connectionUrl) {
+          // 从连接URL解析各个组件
+          this.parseConnectionUrl(connectionUrl);
+        } else {
+          // 没有保存过连接URL，使用默认值
+          this.database.host = "localhost";
+          this.database.port = 3306;
+          this.database.username = "root";
+          this.database.password = "";
+          this.database.database = "";
+        }
 
         // 加载备份设置
         this.backup.path = await getSetting("backup.path", "");
