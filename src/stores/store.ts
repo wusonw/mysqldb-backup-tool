@@ -35,6 +35,7 @@ interface State {
     backupStatus: string;
     lastBackupTime: string;
     mysqldumpAvailable: boolean; // 此字段现在表示"可以进行备份"，不再单指系统mysqldump是否可用
+    currentTableName?: string; // 当前正在备份的表名
   };
 
   // 系统设置
@@ -57,6 +58,7 @@ interface State {
 
   // 定时器
   connectionTimer: number | null;
+  progressTimer: number | null; // 备份进度动画定时器
   isCheckingConnection: boolean;
   settingsSaveDisabled: boolean;
 }
@@ -92,6 +94,7 @@ export const useStore = defineStore("main", {
       backupStatus: "点击按钮开始备份",
       lastBackupTime: "",
       mysqldumpAvailable: false,
+      currentTableName: undefined,
     },
     system: {
       darkMode: false,
@@ -108,6 +111,7 @@ export const useStore = defineStore("main", {
       },
     },
     connectionTimer: null,
+    progressTimer: null,
     isCheckingConnection: false,
     settingsSaveDisabled: false,
   }),
@@ -366,6 +370,21 @@ export const useStore = defineStore("main", {
       }
     },
 
+    // 启动进度动画（使用实时进度事件）
+    startProgressAnimation() {
+      // 如果旧的定时器存在，先清除
+      this.stopProgressAnimation();
+    },
+
+    // 停止进度动画
+    stopProgressAnimation() {
+      if (this.progressTimer) {
+        window.clearInterval(this.progressTimer);
+        this.progressTimer = null;
+        console.log("已停止进度动画");
+      }
+    },
+
     // 备份操作 ==============================================
 
     // 保存备份设置
@@ -433,19 +452,6 @@ export const useStore = defineStore("main", {
         return;
       }
 
-      // 我们已经实现了内置备份功能，所以不再需要检查mysqldump是否可用
-      // 下面代码保留仅作参考
-      /*
-      // 检查mysqldump是否可用
-      if (!this.backup.mysqldumpAvailable) {
-        this.showSnackbar(
-          "无法执行备份：未检测到mysqldump工具，请确保MySQL已安装且mysqldump在系统PATH中",
-          "error"
-        );
-        return;
-      }
-      */
-
       try {
         // 重置状态
         this.backup.isBackingUp = true;
@@ -456,7 +462,32 @@ export const useStore = defineStore("main", {
         const backupFilePath = this.getBackupFilePath();
         console.log(`备份文件将保存到: ${backupFilePath}`);
 
-        this.updateBackupProgress(10); // 初始进度10%
+        // 启动进度动画 - 现在无需启动模拟动画了
+        this.startProgressAnimation();
+
+        // 定义进度回调函数
+        const progressCallback = (
+          percent: number,
+          status: string,
+          currentTable?: string
+        ) => {
+          console.log(
+            `备份进度: ${percent}%, 状态: ${status}, 当前表: ${
+              currentTable || "无"
+            }`
+          );
+          // 更新UI显示的进度
+          this.backup.backupProgress = percent;
+          // 更新状态文本，只显示状态和表名（如果有）
+          this.backup.backupStatus = status;
+          this.backup.currentTableName = currentTable;
+
+          // 清除旧状态，避免干扰
+          if (this.progressTimer) {
+            clearTimeout(this.progressTimer);
+            this.progressTimer = null;
+          }
+        };
 
         // 执行MySQL备份
         try {
@@ -466,10 +497,12 @@ export const useStore = defineStore("main", {
             this.database.username,
             this.database.password,
             this.database.database,
-            backupFilePath
+            backupFilePath,
+            progressCallback // 传递进度回调函数
           );
 
-          this.updateBackupProgress(100); // 备份完成，进度100%
+          // 备份完成
+          this.updateBackupProgress(100);
           this.backup.backupStatus = "备份完成";
           this.backup.lastBackupTime = new Date().toLocaleString();
 
@@ -488,6 +521,8 @@ export const useStore = defineStore("main", {
         this.backup.backupProgress = 0;
         this.showSnackbar(`备份错误: ${error}`, "error");
       } finally {
+        // 确保停止进度动画
+        this.stopProgressAnimation();
         this.backup.isBackingUp = false;
       }
     },

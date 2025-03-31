@@ -85,16 +85,37 @@ onUnmounted(() => {
         </v-tooltip>
 
         <!-- 备份进度条 -->
-        <v-progress-linear
-          v-if="showProgress"
-          :model-value="store.backup.backupProgress"
-          color="primary"
-          height="10"
-          rounded
-          class="mb-3 w-75"
-        ></v-progress-linear>
+        <v-fade-transition>
+          <v-progress-linear
+            v-if="showProgress"
+            :model-value="store.backup.backupProgress"
+            color="primary"
+            height="10"
+            rounded
+            class="mb-3 w-75"
+            :buffer-value="Math.min(store.backup.backupProgress + 15, 100)"
+            :stream="store.backup.backupProgress < 90"
+          ></v-progress-linear>
+        </v-fade-transition>
 
         <div class="text-h5 mt-4">{{ store.backup.backupStatus }}</div>
+
+        <!-- 当前正在备份的表名，只在备份中且有表名时显示 -->
+        <v-fade-transition>
+          <div
+            v-if="showProgress && store.backup.currentTableName"
+            class="text-caption text-grey-darken-1 mt-1"
+            style="font-size: 11px; letter-spacing: -0.2px"
+          >
+            正在备份：{{ store.backup.currentTableName }}
+            {{
+              store.backup.backupStatus.includes("行")
+                ? " - " + store.backup.backupStatus.match(/\(([^)]+)\)/)?.[1]
+                : ""
+            }}
+          </div>
+        </v-fade-transition>
+
         <div v-if="store.backup.lastBackupTime" class="text-subtitle-1 mt-2">
           上次备份时间: {{ store.backup.lastBackupTime }}
         </div>

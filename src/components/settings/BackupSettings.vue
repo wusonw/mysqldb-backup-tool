@@ -40,26 +40,6 @@ const selectBackupPath = async () => {
 
 <template>
   <v-form class="mt-2">
-    <!-- 备份功能就绪提示 -->
-    <v-alert
-      type="success"
-      class="mb-4"
-      variant="tonal"
-      icon="mdi-check-circle"
-    >
-      <div class="d-flex justify-space-between align-center">
-        <div>
-          <div class="text-subtitle-2 font-weight-bold">备份功能已就绪</div>
-          <div class="text-body-2">
-            应用内置了MySQL备份功能，无需依赖外部mysqldump工具
-          </div>
-          <div class="text-body-2 mt-1">
-            备份将为每个表创建单独的SQL文件，并打包为ZIP格式
-          </div>
-        </div>
-      </div>
-    </v-alert>
-
     <v-text-field
       v-model="store.backup.path"
       label="备份文件保存路径"

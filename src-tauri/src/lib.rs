@@ -1,17 +1,43 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 use hex;
 use mysql::{prelude::*, OptsBuilder, Pool, PooledConn};
+use serde::Serialize;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use tauri::command;
+use tauri::{Emitter, Window};
 use tempfile::TempDir;
 use zip::write::{FileOptions, ZipWriter};
 
+// 定义进度事件的数据结构
+#[derive(Serialize, Clone)]
+struct BackupProgress {
+    percent: u8,
+    status: String,
+    current_table: Option<String>,
+}
+
+// 发送进度更新事件
+fn send_progress_update(window: &Window, percent: u8, status: &str, current_table: Option<&str>) {
+    let progress = BackupProgress {
+        percent,
+        status: status.to_string(),
+        current_table: current_table.map(|s| s.to_string()),
+    };
+
+    window
+        .emit("backup-progress", progress)
+        .unwrap_or_else(|e| {
+            eprintln!("发送进度更新事件失败: {}", e);
+        });
+}
+
 #[command]
 fn backup_mysql(
+    window: Window,
     host: &str,
     port: u16,
     username: &str,
@@ -19,13 +45,32 @@ fn backup_mysql(
     database: &str,
     output_path: &str,
 ) -> Result<String, String> {
+    // 首先发送开始事件
+    send_progress_update(&window, 0, "正在准备备份...", None);
+
     // 首先尝试使用系统中安装的mysqldump
     if is_mysqldump_available() {
-        return backup_with_mysqldump(host, port, username, password, database, output_path);
+        return backup_with_mysqldump(
+            window,
+            host,
+            port,
+            username,
+            password,
+            database,
+            output_path,
+        );
     }
 
     // 如果系统中没有安装mysqldump，使用内置的MySQL备份功能
-    return backup_with_rust_mysql(host, port, username, password, database, output_path);
+    return backup_with_rust_mysql(
+        window,
+        host,
+        port,
+        username,
+        password,
+        database,
+        output_path,
+    );
 }
 
 // 检查系统中是否有mysqldump可用
@@ -54,6 +99,7 @@ fn is_mysqldump_available() -> bool {
 
 // 使用系统中的mysqldump命令进行备份
 fn backup_with_mysqldump(
+    window: Window,
     host: &str,
     port: u16,
     username: &str,
@@ -70,6 +116,8 @@ fn backup_with_mysqldump(
         }
     }
 
+    send_progress_update(&window, 5, "准备使用系统mysqldump工具备份...", None);
+
     // 创建临时目录用于存放mysqldump生成的SQL文件
     let temp_dir = match TempDir::new() {
         Ok(dir) => dir,
@@ -79,6 +127,8 @@ fn backup_with_mysqldump(
     // 获取临时SQL文件路径
     let sql_file_path = temp_dir.path().join("full_backup.sql");
     let sql_file_path_str = sql_file_path.to_string_lossy().to_string();
+
+    send_progress_update(&window, 10, "连接数据库...", None);
 
     // 构建 mysqldump 命令
     let mut cmd = Command::new("mysqldump");
@@ -103,6 +153,8 @@ fn backup_with_mysqldump(
         .arg("--result-file")
         .arg(&sql_file_path_str);
 
+    send_progress_update(&window, 20, "正在使用mysqldump导出数据库...", None);
+
     // 执行命令
     match cmd.output() {
         Ok(output) => {
@@ -116,6 +168,8 @@ fn backup_with_mysqldump(
         }
     }
 
+    send_progress_update(&window, 60, "导出完成，正在创建ZIP文件...", None);
+
     // 创建ZIP文件
     let zip_file = match File::create(output_path) {
         Ok(file) => file,
@@ -126,6 +180,8 @@ fn backup_with_mysqldump(
     let options = FileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
+
+    send_progress_update(&window, 70, "正在压缩备份数据...", None);
 
     // 添加SQL文件到ZIP
     if let Err(e) = zip.start_file("mysqldump_backup.sql", options) {
@@ -141,16 +197,20 @@ fn backup_with_mysqldump(
         return Err(format!("写入备份数据到ZIP失败: {}", e));
     }
 
+    send_progress_update(&window, 90, "正在完成ZIP文件...", None);
+
     // 完成ZIP文件
     if let Err(e) = zip.finish() {
         return Err(format!("完成ZIP文件失败: {}", e));
     }
 
+    send_progress_update(&window, 100, "备份完成", None);
     Ok(output_path.to_string())
 }
 
 // 使用Rust MySQL库进行备份（内置备份方式）
 fn backup_with_rust_mysql(
+    window: Window,
     host: &str,
     port: u16,
     username: &str,
@@ -170,11 +230,15 @@ fn backup_with_rust_mysql(
         }
     }
 
+    send_progress_update(&window, 5, "准备使用内置工具备份...", None);
+
     // 创建临时目录用于存放每个表的备份文件
     let temp_dir = match TempDir::new() {
         Ok(dir) => dir,
         Err(e) => return Err(format!("创建临时目录失败: {}", e)),
     };
+
+    send_progress_update(&window, 10, "连接数据库...", None);
 
     // 构建连接选项
     let opts = OptsBuilder::new()
@@ -187,14 +251,22 @@ fn backup_with_rust_mysql(
     // 创建数据库连接
     let pool = match Pool::new(opts) {
         Ok(pool) => pool,
-        Err(e) => return Err(format!("连接数据库失败: {}", e)),
+        Err(e) => {
+            send_progress_update(&window, 0, "连接数据库失败", None);
+            return Err(format!("连接数据库失败: {}", e));
+        }
     };
 
     // 获取连接
     let mut conn = match pool.get_conn() {
         Ok(conn) => conn,
-        Err(e) => return Err(format!("获取数据库连接失败: {}", e)),
+        Err(e) => {
+            send_progress_update(&window, 0, "获取数据库连接失败", None);
+            return Err(format!("获取数据库连接失败: {}", e));
+        }
     };
+
+    send_progress_update(&window, 15, "分析数据库结构...", None);
 
     // 创建数据库信息文件
     let db_info_path = temp_dir.path().join("00_database_info.sql");
@@ -217,11 +289,24 @@ fn backup_with_rust_mysql(
     // 获取所有表名
     let tables: Vec<String> = match conn.query("SHOW TABLES") {
         Ok(result) => result,
-        Err(e) => return Err(format!("获取表列表失败: {}", e)),
+        Err(e) => {
+            send_progress_update(&window, 0, "获取表列表失败", None);
+            return Err(format!("获取表列表失败: {}", e));
+        }
     };
 
+    let total_tables = tables.len();
+    if total_tables == 0 {
+        send_progress_update(&window, 20, "数据库中没有表", None);
+    } else {
+        send_progress_update(&window, 20, "开始备份表结构和数据...", None);
+    }
+
     // 遍历每张表进行备份
-    for table in &tables {
+    for (table_index, table) in tables.iter().enumerate() {
+        let progress = 20 + ((table_index as f32) / (total_tables as f32) * 50.0) as u8;
+        send_progress_update(&window, progress, "正在备份表...", Some(table));
+
         let table_file_name = format!("table_{}.sql", table);
         let table_file_path = temp_dir.path().join(&table_file_name);
 
@@ -237,10 +322,19 @@ fn backup_with_rust_mysql(
         }
 
         // 备份表数据
-        if let Err(e) = backup_table_data(&mut conn, &mut table_file, table) {
+        if let Err(e) = backup_table_data(
+            &window,
+            &mut conn,
+            &mut table_file,
+            table,
+            table_index,
+            total_tables,
+        ) {
             return Err(e);
         }
     }
+
+    send_progress_update(&window, 70, "表备份完成，正在创建ZIP文件...", None);
 
     // 创建ZIP文件
     let zip_file = match File::create(output_path) {
@@ -254,6 +348,8 @@ fn backup_with_rust_mysql(
         .unix_permissions(0o755);
 
     // 首先添加数据库信息文件
+    send_progress_update(&window, 75, "正在压缩数据库信息...", None);
+
     if let Err(e) = zip.start_file("00_database_info.sql", options) {
         return Err(format!("添加数据库信息到ZIP失败: {}", e));
     }
@@ -268,7 +364,10 @@ fn backup_with_rust_mysql(
     }
 
     // 添加所有表文件到ZIP
-    for table in &tables {
+    for (idx, table) in tables.iter().enumerate() {
+        let progress = 75 + ((idx as f32) / (total_tables as f32) * 20.0) as u8;
+        send_progress_update(&window, progress, "正在压缩表数据...", Some(table));
+
         let table_file_name = format!("table_{}.sql", table);
         let table_file_path = temp_dir.path().join(&table_file_name);
 
@@ -287,11 +386,14 @@ fn backup_with_rust_mysql(
         }
     }
 
+    send_progress_update(&window, 95, "正在完成ZIP文件...", None);
+
     // 完成ZIP文件
     if let Err(e) = zip.finish() {
         return Err(format!("完成ZIP文件失败: {}", e));
     }
 
+    send_progress_update(&window, 100, "备份完成", None);
     Ok(output_path.to_string())
 }
 
@@ -330,9 +432,12 @@ fn backup_table_structure(
 
 // 备份表数据
 fn backup_table_data(
+    window: &Window,
     conn: &mut PooledConn,
     output_file: &mut fs::File,
     table: &str,
+    table_index: usize,
+    total_tables: usize,
 ) -> Result<(), String> {
     // 写入表数据开始标记
     if let Err(e) = writeln!(output_file, "\n-- 表数据: {}\n", table) {
@@ -368,6 +473,14 @@ fn backup_table_data(
         }
     }
 
+    // 获取表数据行数
+    let row_count: u64 = match conn.query_first(format!("SELECT COUNT(*) as count FROM {}", table))
+    {
+        Ok(Some(count)) => count,
+        Ok(None) => 0,
+        Err(_) => 0,
+    };
+
     // 获取表数据
     let rows = match conn.query_iter(format!("SELECT * FROM {}", table)) {
         Ok(rows) => rows,
@@ -376,6 +489,7 @@ fn backup_table_data(
 
     // 生成INSERT语句
     let mut row_buffer = Vec::new();
+    let mut rows_processed = 0;
 
     for row_result in rows {
         let row = match row_result {
@@ -398,6 +512,18 @@ fn backup_table_data(
         // 将行格式化为：(val1, val2, ...)
         let row_values = format!("({})", value_strings.join(", "));
         row_buffer.push(row_values);
+
+        rows_processed += 1;
+
+        // 每1000行发送一次进度更新
+        if rows_processed % 1000 == 0 && row_count > 0 {
+            // 计算总体进度 (20-70%的范围用于表备份)
+            let base_progress = 20 + (table_index as f32 / total_tables as f32 * 50.0) as u8;
+
+            // 发送详细的进度更新
+            let status = format!("正在备份表数据...");
+            send_progress_update(window, base_progress, &status, Some(table));
+        }
 
         // 每1000行写入一次
         if row_buffer.len() >= 1000 {

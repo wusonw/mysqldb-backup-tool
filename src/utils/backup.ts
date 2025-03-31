@@ -1,4 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
+// 定义进度更新回调函数类型
+export type ProgressCallback = (
+  percent: number,
+  status: string,
+  currentTable?: string
+) => void;
 
 /**
  * 执行MySQL数据库备份
@@ -9,6 +17,7 @@ import { invoke } from "@tauri-apps/api/core";
  * @param password 数据库密码
  * @param database 要备份的数据库名
  * @param outputPath 备份文件输出路径
+ * @param progressCallback 进度更新回调函数
  * @returns 成功时返回备份文件路径，失败时抛出错误
  */
 export async function backupMysqlDatabase(
@@ -17,7 +26,8 @@ export async function backupMysqlDatabase(
   username: string,
   password: string,
   database: string,
-  outputPath: string
+  outputPath: string,
+  progressCallback?: ProgressCallback
 ): Promise<string> {
   try {
     console.log(`开始备份MySQL数据库: ${database}`);
@@ -25,6 +35,27 @@ export async function backupMysqlDatabase(
       `参数: ${host}:${port}, 用户: ${username}, 输出: ${outputPath}`
     );
 
+    // 注册进度更新事件监听器
+    let unlisten: (() => void) | null = null;
+
+    if (progressCallback) {
+      unlisten = await listen("backup-progress", (event) => {
+        const payload = event.payload as {
+          percent: number;
+          status: string;
+          current_table?: string;
+        };
+
+        // 调用回调函数更新进度
+        progressCallback(
+          payload.percent,
+          payload.status,
+          payload.current_table
+        );
+      });
+    }
+
+    // 调用Rust函数执行备份
     const result = await invoke<string>("backup_mysql", {
       host,
       port,
@@ -33,6 +64,11 @@ export async function backupMysqlDatabase(
       database,
       outputPath,
     });
+
+    // 移除事件监听器
+    if (unlisten) {
+      unlisten();
+    }
 
     console.log(`备份成功: ${result}`);
     return result;
