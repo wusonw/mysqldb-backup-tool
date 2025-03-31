@@ -26,6 +26,7 @@ tauri-plugin-autostart = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-sql = { version = "2", features = ["mysql"] }
 tauri-plugin-store = "2"
+tauri-plugin-notification = "2"
 mysql = "24.0.0"
 hex = "0.4.3"
 zip = "0.6.6"

@@ -9,6 +9,7 @@ import {
 } from "../utils/autostart";
 import { backupMysqlDatabase } from "../utils/backup";
 import { useDateFormat } from "@vueuse/core";
+import { sendNotification } from "@tauri-apps/plugin-notification";
 
 // 定义Store的状态接口
 interface State {
@@ -509,10 +510,18 @@ export const useStore = defineStore("main", {
           // 保存最后备份时间到数据库
           await saveSetting("lastBackupTime", this.backup.lastBackupTime);
 
+          // 显示成功提示
           this.showSnackbar(
             `数据库备份成功，已保存到:\n${backupFilePath}`,
             "success"
           );
+
+          // 发送系统通知
+          sendNotification({
+            title: "MySQL备份完成",
+            body: `数据库 ${this.database.database} 备份已完成！\n文件已保存到: ${backupFilePath}`,
+            icon: "icon.png", // 使用应用图标
+          });
         } catch (error) {
           throw new Error(`MySQL备份失败: ${error}`);
         }
@@ -520,6 +529,17 @@ export const useStore = defineStore("main", {
         this.backup.backupStatus = "备份出错";
         this.backup.backupProgress = 0;
         this.showSnackbar(`备份错误: ${error}`, "error");
+
+        // 备份失败也发送通知
+        try {
+          await sendNotification({
+            title: "MySQL备份失败",
+            body: `数据库 ${this.database.database} 备份失败: ${error}`,
+            icon: "icon.png",
+          });
+        } catch (notifyError) {
+          console.error("发送失败通知出错:", notifyError);
+        }
       } finally {
         // 确保停止进度动画
         this.stopProgressAnimation();
