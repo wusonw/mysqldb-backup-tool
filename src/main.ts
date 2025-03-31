@@ -3,6 +3,7 @@ import App from "./App.vue";
 import vuetify from "./plugins/vuetify";
 import { createPinia } from "pinia";
 import { initStore } from "./utils/store";
+import { useStore } from "./stores/store";
 
 // 导入自定义样式
 import "./assets/styles";
@@ -16,3 +17,7 @@ initStore().catch((error) => {
 });
 
 createApp(App).use(vuetify).use(pinia).mount("#app");
+
+const store = useStore();
+store.startConnectionMonitor();
+store.startBackupMonitor();

@@ -60,6 +60,7 @@ interface State {
   // 定时器
   connectionTimer: number | null;
   progressTimer: number | null; // 备份进度动画定时器
+  backupMonitorTimer: number | null; // 自动备份监控定时器
   isCheckingConnection: boolean;
   settingsSaveDisabled: boolean;
 }
@@ -113,6 +114,7 @@ export const useStore = defineStore("main", {
     },
     connectionTimer: null,
     progressTimer: null,
+    backupMonitorTimer: null,
     isCheckingConnection: false,
     settingsSaveDisabled: false,
   }),
@@ -368,6 +370,108 @@ export const useStore = defineStore("main", {
         window.clearInterval(this.connectionTimer);
         this.connectionTimer = null;
         console.log("已停止数据库连接状态监控");
+      }
+    },
+
+    // 启动自动备份监控
+    startBackupMonitor() {
+      // 如果定时器已存在，先停止
+      this.stopBackupMonitor();
+
+      // 启动新的定时器，每10分钟检查一次是否需要自动备份
+      this.backupMonitorTimer = window.setInterval(() => {
+        this.checkAndAutoBackup();
+      }, 10 * 60 * 1000); // 10分钟 = 600000毫秒
+
+      console.log("已启动自动备份监控");
+    },
+
+    // 停止自动备份监控
+    stopBackupMonitor() {
+      if (this.backupMonitorTimer) {
+        window.clearInterval(this.backupMonitorTimer);
+        this.backupMonitorTimer = null;
+        console.log("已停止自动备份监控");
+      }
+    },
+
+    // 检查并执行自动备份
+    async checkAndAutoBackup() {
+      // 检查自动备份是否启用
+      if (!this.backup.auto) {
+        console.log("自动备份未启用，跳过检查");
+        return;
+      }
+
+      // 检查数据库是否已连接
+      if (!this.database.isConnected) {
+        console.log("数据库未连接，跳过自动备份");
+        return;
+      }
+
+      // 检查是否正在进行备份
+      if (this.backup.isBackingUp) {
+        console.log("备份正在进行中，跳过自动备份检查");
+        return;
+      }
+
+      // 检查是否设置了备份路径
+      if (!this.backup.path) {
+        console.log("未设置备份路径，跳过自动备份");
+        return;
+      }
+
+      try {
+        // 获取当前时间
+        const now = new Date();
+
+        // 如果没有上次备份时间，直接执行备份
+        if (!this.backup.lastBackupTime) {
+          console.log("没有上次备份记录，执行首次自动备份");
+          await this.startBackup();
+          return;
+        }
+
+        // 解析上次备份时间
+        const lastBackupTime = new Date(this.backup.lastBackupTime);
+
+        // 根据备份频率确定是否需要备份
+        let shouldBackup = false;
+
+        switch (this.backup.frequency) {
+          case "daily":
+            // 检查是否已过去24小时
+            shouldBackup =
+              now.getTime() - lastBackupTime.getTime() >= 24 * 60 * 60 * 1000;
+            break;
+          case "weekly":
+            // 检查是否已过去7天
+            shouldBackup =
+              now.getTime() - lastBackupTime.getTime() >=
+              7 * 24 * 60 * 60 * 1000;
+            break;
+          case "monthly":
+            // 检查是否已过去30天
+            shouldBackup =
+              now.getTime() - lastBackupTime.getTime() >=
+              30 * 24 * 60 * 60 * 1000;
+            break;
+          default:
+            console.log(
+              `未知的备份频率: ${this.backup.frequency}，使用每日备份`
+            );
+            shouldBackup =
+              now.getTime() - lastBackupTime.getTime() >= 24 * 60 * 60 * 1000;
+        }
+
+        if (shouldBackup) {
+          console.log(`已达到备份频率 ${this.backup.frequency}，开始自动备份`);
+          await this.startBackup();
+        } else {
+          console.log("未达到备份频率，跳过自动备份");
+        }
+      } catch (error) {
+        console.error("自动备份检查出错:", error);
       }
     },
 
@@ -704,6 +808,9 @@ export const useStore = defineStore("main", {
 
         // 启动数据库连接状态监控
         this.startConnectionMonitor();
+
+        // 启动自动备份监控
+        this.startBackupMonitor();
       } catch (error) {
         console.error("加载设置失败:", error);
         this.showSnackbar("加载设置失败", "error");
