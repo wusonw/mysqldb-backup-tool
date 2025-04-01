@@ -1,7 +1,7 @@
 import { Window } from "@tauri-apps/api/window";
 import { getSetting } from "./store";
 import { exit } from "@tauri-apps/plugin-process";
-import { useTray } from "./tray";
+import { useStore } from "../stores/store";
 
 // 定义关闭事件接口
 interface CloseRequestedEvent {
@@ -73,8 +73,9 @@ export async function hideWindow(): Promise<void> {
  */
 export async function exitApp(): Promise<void> {
   try {
-    const tray = await useTray();
-    await tray.close();
+    const store = useStore();
+    const tray = await store.getSystemTray();
+    await tray?.close();
     await exit(0);
   } catch (error) {
     console.error("退出应用时出错:", error);

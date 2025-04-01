@@ -2,9 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": [
-    "main"
-  ],
+  "windows": ["main"],
   "permissions": [
     "core:default",
     "sql:default",
@@ -21,11 +19,10 @@
     "core:window:allow-hide",
     "core:window:allow-show",
     "core:window:allow-close",
+    "core:window:allow-set-focus",
     "core:tray:default",
     "core:tray:allow-new",
     "process:default",
-    "process:allow-exit",
-    "process:default",
-    "process:default"
+    "process:allow-exit"
   ]
 }

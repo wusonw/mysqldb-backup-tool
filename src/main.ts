@@ -5,7 +5,6 @@ import { createPinia } from "pinia";
 import { initStore } from "./utils/store";
 import { useStore } from "./stores/store";
 import { setupWindowCloseHandler } from "./utils/window";
-import { useTray } from "./utils/tray";
 
 // 导入自定义样式
 import "./assets/styles";
@@ -25,13 +24,19 @@ createApp(App).use(vuetify).use(pinia).mount("#app");
 const store = useStore();
 store.startConnectionMonitor();
 store.startBackupMonitor();
+store.getSystemTray();
 
 // 设置窗口关闭事件处理器
 setupWindowCloseHandler().catch((error) => {
   console.error("设置窗口关闭事件处理器失败:", error);
 });
 
-// 初始化系统托盘
-useTray().catch((error) => {
-  console.error("初始化系统托盘失败:", error);
-});
+// 禁用右键菜单 - 仅在生产环境中生效
+// 在开发环境中保留右键功能便于调试
+if (import.meta.env.PROD) {
+  console.log("生产环境，禁用右键菜单");
+  document.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    return false;
+  });
+}

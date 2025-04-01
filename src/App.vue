@@ -10,6 +10,9 @@ const store = useStore();
 // 使用Vuetify主题
 const theme = useTheme();
 
+// 判断是否为生产环境
+const isProduction = import.meta.env.PROD;
+
 // 计算属性：是否显示备份进度
 const showProgress = computed(() => store.showProgress);
 
@@ -42,7 +45,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <v-app>
+  <v-app :class="{ 'production-mode': isProduction }">
     <v-main class="main-content">
       <v-container
         class="d-flex flex-column align-center justify-center main-container pa-0"
