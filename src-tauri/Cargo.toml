@@ -1,6 +1,6 @@
 [package]
 name = "mysql-backup-tool"
-version = "0.1.0"
+version = "1.0.0"
 description = "MySQL数据库备份工具"
 authors = ["wzwang"]
 edition = "2021"
