@@ -12,34 +12,46 @@ interface CloseRequestedEvent {
  * 当窗口关闭时，根据最小化到托盘设置决定是隐藏窗口还是退出应用
  */
 export async function setupWindowCloseHandler(): Promise<void> {
-  const mainWin = await getMainWindow();
-  // 监听窗口关闭请求
-  mainWin.onCloseRequested(async (event: CloseRequestedEvent) => {
-    // 阻止默认关闭行为
-    event.preventDefault();
+  try {
+    const mainWin = await getMainWindow();
+    console.log("设置窗口关闭事件处理器...");
 
-    try {
-      // 获取是否最小化到托盘的设置
-      const minimizeToTray = await getSetting<boolean>(
-        "system.minimizeToTray",
-        true
-      );
+    // 监听窗口关闭请求
+    mainWin.onCloseRequested(async (event: CloseRequestedEvent) => {
+      // 阻止默认关闭行为
+      event.preventDefault();
 
-      if (minimizeToTray) {
-        // 如果开启了最小化到托盘，则隐藏窗口
-        console.log("已启用最小化到托盘，隐藏窗口");
-        await hideWindow();
-      } else {
-        // 否则退出应用
-        console.log("未启用最小化到托盘，退出应用");
+      try {
+        // 获取是否最小化到托盘的设置
+        const minimizeToTray = await getSetting<boolean>(
+          "system.minimizeToTray",
+          true
+        );
+
+        console.log(
+          `关闭窗口事件触发，minimizeToTray设置为: ${minimizeToTray}`
+        );
+
+        if (minimizeToTray) {
+          // 如果开启了最小化到托盘，则隐藏窗口
+          console.log("已启用最小化到托盘，隐藏窗口");
+          await hideWindow();
+        } else {
+          // 否则退出应用
+          console.log("未启用最小化到托盘，退出应用");
+          await exitApp();
+        }
+      } catch (error) {
+        console.error("处理窗口关闭事件时出错:", error);
+        // 出错时默认退出应用
         await exitApp();
       }
-    } catch (error) {
-      console.error("处理窗口关闭事件时出错:", error);
-    }
-  });
+    });
 
-  console.log("窗口关闭事件处理器已设置");
+    console.log("窗口关闭事件处理器已设置完成");
+  } catch (error) {
+    console.error("设置窗口关闭事件处理器失败:", error);
+  }
 }
 
 /**
@@ -48,6 +60,7 @@ export async function setupWindowCloseHandler(): Promise<void> {
 export async function showWindow(): Promise<void> {
   try {
     const mainWin = await getMainWindow();
+    console.log("显示主窗口");
     await mainWin.show();
     await mainWin.setFocus();
   } catch (error) {
@@ -61,6 +74,7 @@ export async function showWindow(): Promise<void> {
 export async function hideWindow(): Promise<void> {
   try {
     const mainWin = await getMainWindow();
+    console.log("隐藏主窗口到托盘");
     await mainWin.hide();
   } catch (error) {
     console.error("隐藏窗口时出错:", error);
@@ -72,7 +86,8 @@ export async function hideWindow(): Promise<void> {
  */
 export async function exitApp(): Promise<void> {
   try {
-    await exit(1);
+    console.log("退出应用程序");
+    await exit(0);
   } catch (error) {
     console.error("退出应用时出错:", error);
   }

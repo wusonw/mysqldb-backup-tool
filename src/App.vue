@@ -1,26 +1,46 @@
 <script setup lang="ts">
-import { computed, watch } from "vue";
+import { computed, watch, onMounted } from "vue";
 import Settings from "./components/Settings.vue";
 import { usePiniaStore } from "./stores/store";
 import { useTheme } from "vuetify";
+import { initStore } from "./utils/store";
+import { getMainWindow, setupWindowCloseHandler } from "./utils/window";
+import { setSystemTray } from "./utils/tray";
 
-// 使用Pinia Store
-const store = usePiniaStore();
 // 使用Vuetify主题
 const theme = useTheme();
 
 // 计算属性：是否显示备份进度
 const showProgress = computed(() => store.showProgress);
 
+const store = usePiniaStore();
+
+async function init() {
+  // 初始化存储
+  await initStore();
+  await store.initializeSettings();
+  await store.checkConnectionStatus();
+  await setupWindowCloseHandler();
+  await setSystemTray();
+
+  store.startConnectionMonitor();
+  store.startBackupMonitor();
+}
+
+onMounted(init);
+
+async function setTheme(isDarkMode: boolean) {
+  const mainWindow = await getMainWindow();
+  await mainWindow.setTheme(isDarkMode ? "dark" : "light");
+  theme.global.name.value = isDarkMode ? "dark" : "light";
+}
+
 // 监听深色模式变化，实时应用主题
 watch(
   () => store.system.darkMode,
-  (isDarkMode) => {
-    // 切换Vuetify主题
-    theme.global.name.value = isDarkMode ? "dark" : "light";
-    console.log(`主题已切换为: ${isDarkMode ? "深色模式" : "浅色模式"}`);
-  },
-  { immediate: true } // 立即执行一次，确保初始化时应用正确的主题
+  async (isDarkMode) => {
+    await setTheme(isDarkMode);
+  }
 );
 </script>
 

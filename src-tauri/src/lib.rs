@@ -885,6 +885,7 @@ fn cleanup_old_backups_impl(backup_dir: &str, keep_days: i32) -> Result<usize, S
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[allow(deprecated)]
 pub fn run() {
     let mut builder = tauri::Builder::default().manage(BackupState::default()); // 注册备份状态管理
 
@@ -913,7 +914,6 @@ pub fn run() {
                 cleanup_old_backups
             ])
     }
-
     builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -16,11 +16,22 @@
         "width": 450,
         "height": 700,
         "minWidth": 450,
-        "minHeight": 700
+        "minHeight": 700,
+        "visible": true,
+        "label": "main",
+        "theme": "Light"
       }
     ],
     "security": {
       "csp": null
+    },
+    "trayIcon": {
+      "id": "main-tray",
+      "iconPath": "icons/32x32.png",
+      "iconAsTemplate": true,
+      "title": "MySQL数据库备份工具",
+      "showMenuOnLeftClick": true,
+      "tooltip": "MySQL数据库备份工具"
     }
   },
   "bundle": {

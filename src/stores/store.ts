@@ -14,9 +14,6 @@ import {
 } from "../utils/backup";
 import { useDateFormat } from "@vueuse/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
-import { TrayIcon } from "@tauri-apps/api/tray";
-import { Menu } from "@tauri-apps/api/menu";
-import { exitApp, showWindow } from "../utils/window";
 
 // 定义Store的状态接口
 interface State {
@@ -71,7 +68,6 @@ interface State {
   backupMonitorTimer: number | null; // 自动备份监控定时器
   isCheckingConnection: boolean;
   settingsSaveDisabled: boolean;
-  systemTray: TrayIcon | null;
 }
 
 // 定义备份频率选项
@@ -127,7 +123,6 @@ export const usePiniaStore = defineStore("main", {
     backupMonitorTimer: null,
     isCheckingConnection: false,
     settingsSaveDisabled: false,
-    systemTray: null,
   }),
 
   // 定义getters
@@ -846,44 +841,6 @@ export const usePiniaStore = defineStore("main", {
         console.error("加载设置失败:", error);
         this.showSnackbar("加载设置失败", "error");
       }
-    },
-
-    // 初始化系统托盘
-    async getSystemTray() {
-      const tray = await TrayIcon.getById("main-tray");
-      this.systemTray = tray;
-      if (!this.systemTray) {
-        try {
-          // 创建托盘图标
-          this.systemTray = await TrayIcon.new({
-            id: "main-tray",
-            icon: "icons/128x128.png",
-            title: "MySQL数据库备份工具",
-            tooltip: "MySQL数据库备份工具",
-            menu: await Menu.new({
-              id: "main-tray-menu",
-              items: [
-                {
-                  id: "show",
-                  text: "显示主窗口",
-                  action: showWindow,
-                },
-                {
-                  id: "quit",
-                  text: "退出",
-                  action: exitApp,
-                },
-              ],
-            }),
-          });
-
-          console.log("系统托盘创建成功");
-        } catch (error) {
-          console.error("创建系统托盘失败:", error);
-          throw error;
-        }
-      }
-      return this.systemTray;
     },
   },
 });
