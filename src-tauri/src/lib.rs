@@ -10,7 +10,7 @@ use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
 use tauri::command;
-use tauri::{Emitter, Window};
+use tauri::{Emitter, Manager, Window};
 use tempfile::TempDir;
 use zip::write::{FileOptions, ZipWriter};
 
@@ -810,22 +810,34 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: i32) -> Result<usize, String
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None::<Vec<&str>>,
-        ))
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_sql::Builder::new().build())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_process::init())
-        .invoke_handler(tauri::generate_handler![
-            backup_mysql,
-            check_mysqldump_availability,
-            cleanup_old_backups
-        ])
+    let mut builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    {
+        builder = builder
+            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+                let _ = app
+                    .get_webview_window("main")
+                    .expect("no main window")
+                    .set_focus();
+            }))
+            .plugin(tauri_plugin_store::Builder::new().build())
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None::<Vec<&str>>,
+            ))
+            .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_sql::Builder::new().build())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(tauri_plugin_notification::init())
+            .plugin(tauri_plugin_process::init())
+            .invoke_handler(tauri::generate_handler![
+                backup_mysql,
+                check_mysqldump_availability,
+                cleanup_old_backups
+            ])
+    }
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
