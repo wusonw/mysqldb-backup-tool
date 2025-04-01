@@ -59,24 +59,26 @@ export async function backupMysqlDatabase(
       });
     }
 
-    // 调用Rust函数执行备份
-    const result = await invoke<string>("backup_mysql", {
-      host,
-      port,
-      username,
-      password,
-      database,
-      outputPath,
-      engine, // 传递备份引擎参数
-    });
+    try {
+      // 调用Rust函数执行备份（在子进程中异步执行）
+      const result = await invoke<string>("backup_mysql", {
+        host,
+        port,
+        username,
+        password,
+        database,
+        outputPath,
+        engine, // 传递备份引擎参数
+      });
 
-    // 移除事件监听器
-    if (unlisten) {
-      unlisten();
+      console.log(`备份成功: ${result}`);
+      return result;
+    } finally {
+      // 确保始终移除事件监听器，无论成功或失败
+      if (unlisten) {
+        unlisten();
+      }
     }
-
-    console.log(`备份成功: ${result}`);
-    return result;
   } catch (error) {
     console.error("备份MySQL数据库失败:", error);
     throw error;

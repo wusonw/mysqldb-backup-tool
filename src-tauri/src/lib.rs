@@ -9,9 +9,12 @@ use std::io::Write;
 use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
+use std::thread;
 use tauri::command;
-use tauri::{Emitter, Manager, Window};
+use tauri::{Emitter, Manager, State, Window};
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 use zip::write::{FileOptions, ZipWriter};
 
 // 定义进度事件的数据结构
@@ -20,6 +23,12 @@ struct BackupProgress {
     percent: u8,
     status: String,
     current_table: Option<String>,
+}
+
+// 定义备份状态结构
+#[derive(Default)]
+struct BackupState {
+    is_running: Mutex<bool>,
 }
 
 // 发送进度更新事件
@@ -37,8 +46,9 @@ fn send_progress_update(window: &Window, percent: u8, status: &str, current_tabl
         });
 }
 
+// 修改备份命令为异步命令
 #[command]
-fn backup_mysql(
+async fn backup_mysql(
     window: Window,
     host: &str,
     port: u16,
@@ -47,66 +57,112 @@ fn backup_mysql(
     database: &str,
     output_path: &str,
     engine: Option<&str>,
+    backup_state: State<'_, BackupState>,
 ) -> Result<String, String> {
+    // 检查是否已经有备份在运行
+    {
+        let is_running = backup_state.is_running.lock().map_err(|e| e.to_string())?;
+        if *is_running {
+            return Err("已有备份任务正在运行".to_string());
+        }
+    }
+
     // 首先发送开始事件
     send_progress_update(&window, 0, "正在准备备份...", None);
 
-    // 根据指定的引擎或可用性选择备份方法
-    match engine {
-        // 如果明确指定使用mysqldump
-        Some("mysqldump") => {
-            if is_mysqldump_available() {
-                return backup_with_mysqldump(
-                    window,
-                    host,
-                    port,
-                    username,
-                    password,
-                    database,
-                    output_path,
-                );
-            } else {
-                // 如果指定了mysqldump但它不可用，返回错误
-                return Err("指定使用mysqldump但系统中没有可用的mysqldump命令".to_string());
-            }
-        }
-        // 如果明确指定使用内置引擎
-        Some("builtin") => {
-            return backup_with_rust_mysql(
-                window,
-                host,
-                port,
-                username,
-                password,
-                database,
-                output_path,
-            );
-        }
-        // 如果没有指定或指定了其他值，使用自动选择逻辑
-        _ => {
-            if is_mysqldump_available() {
-                return backup_with_mysqldump(
-                    window,
-                    host,
-                    port,
-                    username,
-                    password,
-                    database,
-                    output_path,
-                );
-            } else {
-                return backup_with_rust_mysql(
-                    window,
-                    host,
-                    port,
-                    username,
-                    password,
-                    database,
-                    output_path,
-                );
-            }
-        }
+    // 标记备份已开始
+    {
+        let mut is_running = backup_state.is_running.lock().map_err(|e| e.to_string())?;
+        *is_running = true;
     }
+
+    // 克隆需要的数据以便在线程中使用
+    let window_clone = window.clone();
+    let host = host.to_string();
+    let username = username.to_string();
+    let password = password.to_string();
+    let database = database.to_string();
+    let output_path = output_path.to_string();
+    let engine = engine.map(|s| s.to_string());
+
+    // 创建通道用于接收结果
+    let (tx, mut rx) = mpsc::channel::<Result<String, String>>(1);
+
+    // 创建一个新线程来处理备份
+    let _ = thread::spawn(move || {
+        let backup_result = match engine.as_deref() {
+            // 如果明确指定使用mysqldump
+            Some("mysqldump") => {
+                if is_mysqldump_available() {
+                    backup_with_mysqldump(
+                        window_clone.clone(),
+                        &host,
+                        port,
+                        &username,
+                        &password,
+                        &database,
+                        &output_path,
+                    )
+                } else {
+                    // 如果指定了mysqldump但它不可用，返回错误
+                    Err("指定使用mysqldump但系统中没有可用的mysqldump命令".to_string())
+                }
+            }
+            // 如果明确指定使用内置引擎
+            Some("builtin") => backup_with_rust_mysql(
+                window_clone.clone(),
+                &host,
+                port,
+                &username,
+                &password,
+                &database,
+                &output_path,
+            ),
+            // 如果没有指定或指定了其他值，使用自动选择逻辑
+            _ => {
+                if is_mysqldump_available() {
+                    backup_with_mysqldump(
+                        window_clone.clone(),
+                        &host,
+                        port,
+                        &username,
+                        &password,
+                        &database,
+                        &output_path,
+                    )
+                } else {
+                    backup_with_rust_mysql(
+                        window_clone.clone(),
+                        &host,
+                        port,
+                        &username,
+                        &password,
+                        &database,
+                        &output_path,
+                    )
+                }
+            }
+        };
+
+        // 无论成功或失败，确保发送结果
+        if let Err(e) = tx.blocking_send(backup_result) {
+            eprintln!("无法发送备份结果: {}", e);
+        }
+    });
+
+    // 等待结果
+    let result = match rx.recv().await {
+        Some(r) => r,
+        None => Err("备份过程意外终止".to_string()),
+    };
+
+    // 释放备份中标记
+    {
+        let mut is_running = backup_state.is_running.lock().map_err(|e| e.to_string())?;
+        *is_running = false;
+    }
+
+    result
 }
 
 // 检查系统中是否有mysqldump可用
@@ -740,13 +796,33 @@ fn check_mysqldump_availability() -> bool {
 
 // 清理旧备份文件
 #[command]
-fn cleanup_old_backups(backup_dir: &str, keep_days: i32) -> Result<usize, String> {
+async fn cleanup_old_backups(backup_dir: &str, keep_days: i32) -> Result<usize, String> {
     // 如果keep_days小于等于0，表示不限制保留期，不删除任何文件
     if keep_days <= 0 {
         println!("备份保留天数设置为不限制，跳过清理");
         return Ok(0);
     }
 
+    // 创建一个新线程来处理文件清理
+    let backup_dir = backup_dir.to_string();
+    let (tx, mut rx) = mpsc::channel::<Result<usize, String>>(1);
+
+    let _ = thread::spawn(move || {
+        let result = cleanup_old_backups_impl(&backup_dir, keep_days);
+        if let Err(e) = tx.blocking_send(result) {
+            eprintln!("无法发送清理结果: {}", e);
+        }
+    });
+
+    // 等待结果
+    match rx.recv().await {
+        Some(r) => r,
+        None => Err("清理过程意外终止".to_string()),
+    }
+}
+
+// 实际执行清理逻辑的函数
+fn cleanup_old_backups_impl(backup_dir: &str, keep_days: i32) -> Result<usize, String> {
     let path = Path::new(backup_dir);
 
     // 检查路径是否存在且是目录
@@ -810,7 +886,8 @@ fn cleanup_old_backups(backup_dir: &str, keep_days: i32) -> Result<usize, String
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default();
+    let mut builder = tauri::Builder::default().manage(BackupState::default()); // 注册备份状态管理
+
     #[cfg(desktop)]
     {
         builder = builder

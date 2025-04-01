@@ -2903,6 +2903,7 @@ dependencies = [
  "tauri-plugin-sql",
  "tauri-plugin-store",
  "tempfile",
+ "tokio",
  "zip",
 ]
 
@@ -5764,6 +5765,7 @@ dependencies = [
  "bytes",
  "libc",
  "mio",
+ "parking_lot",
  "pin-project-lite",
  "signal-hook-registry",
  "socket2",
