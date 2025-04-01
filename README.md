@@ -22,7 +22,7 @@
 
 ### 安装
 
-1. 从[发布页面](https://github.com/wusonw/mysql-backup-tool/releases)下载最新版安装包
+1. 从[发布页面](https://github.com/wusonw/mysqldb-backup-tool/releases)下载最新版安装包
 2. 运行安装程序，按照指示完成安装
 3. 启动应用程序
 
