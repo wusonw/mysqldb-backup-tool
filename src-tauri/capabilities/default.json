@@ -16,6 +16,16 @@
     "autostart:allow-enable",
     "autostart:allow-disable",
     "store:default",
-    "notification:default"
+    "notification:default",
+    "core:window:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-close",
+    "core:tray:default",
+    "core:tray:allow-new",
+    "process:default",
+    "process:allow-exit",
+    "process:default",
+    "process:default"
   ]
 }

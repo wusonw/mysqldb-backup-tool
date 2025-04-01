@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, computed, watch } from "vue";
 import Settings from "./components/Settings.vue";
 import { useStore } from "./stores/store";
 import { useTheme } from "vuetify";
+import { setupWindowCloseHandler } from "./utils/window";
 
 // 使用Pinia Store
 const store = useStore();
@@ -28,6 +29,10 @@ onMounted(async () => {
   // 初始化所有设置并启动连接监控
   await store.initializeSettings();
   store.checkConnectionStatus();
+
+  // 设置窗口关闭事件监听
+  await setupWindowCloseHandler();
+  console.log("应用已启动，窗口关闭处理已配置");
 });
 
 // 组件卸载时清除定时器
