@@ -110,13 +110,12 @@ const toggleAutoStart = (value: boolean | null) => {
       启用后，退出时将最小化到系统托盘而不是退出应用
       <v-tooltip location="bottom">
         <template v-slot:activator="{ props }">
-          <v-chip v-bind="props" size="x-small" color="warning" class="ml-1"
-            >开发中</v-chip
+          <v-chip v-bind="props" size="x-small" color="success" class="ml-1"
+            >系统功能</v-chip
           >
         </template>
         <div class="pa-2">
-          <div>此功能正在开发中</div>
-          <div>可能存在不稳定情况</div>
+          <div>如需要开启自动备份功能，建议先开启最小化到托盘功能</div>
         </div>
       </v-tooltip>
     </div>

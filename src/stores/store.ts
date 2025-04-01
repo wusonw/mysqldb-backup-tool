@@ -850,6 +850,8 @@ export const useStore = defineStore("main", {
 
     // 初始化系统托盘
     async getSystemTray() {
+      const tray = await TrayIcon.getById("main-tray");
+      this.systemTray = tray;
       if (!this.systemTray) {
         try {
           // 创建托盘图标
