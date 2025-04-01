@@ -18,15 +18,19 @@ initStore();
 // 创建Vue应用
 createApp(App).use(vuetify).use(pinia).mount("#app");
 
-// 初始化状态
-const store = usePiniaStore();
-await store.initializeSettings();
-await store.checkConnectionStatus();
-await store.getSystemTray();
-await setupWindowCloseHandler();
+async function init() {
+  // 初始化状态
+  const store = usePiniaStore();
+  await store.initializeSettings();
+  await store.checkConnectionStatus();
+  await store.getSystemTray();
+  await setupWindowCloseHandler();
 
-store.startConnectionMonitor();
-store.startBackupMonitor();
+  store.startConnectionMonitor();
+  store.startBackupMonitor();
+}
+
+init();
 
 // 禁用右键菜单 - 仅在生产环境中生效
 // 在开发环境中保留右键功能便于调试
