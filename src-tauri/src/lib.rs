@@ -5,6 +5,8 @@ use serde::Serialize;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::process::Command;
 use tauri::command;
@@ -113,7 +115,12 @@ fn is_mysqldump_available() -> bool {
     #[cfg(target_os = "windows")]
     {
         // Windows下检查mysqldump.exe是否存在于PATH中
-        let result = Command::new("where").arg("mysqldump").output();
+        // 使用.creation_flags(0x08000000)来隐藏窗口
+        // 0x08000000是CREATE_NO_WINDOW标志，防止显示命令行窗口
+        let result = Command::new("where")
+            .arg("mysqldump")
+            .creation_flags(0x08000000)
+            .output();
         match result {
             Ok(output) => output.status.success(),
             Err(_) => false,
@@ -166,6 +173,11 @@ fn backup_with_mysqldump(
 
     // 构建 mysqldump 命令
     let mut cmd = Command::new("mysqldump");
+
+    // 在Windows平台上添加无窗口标志
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(0x08000000);
+
     cmd.arg(format!("--host={}", host))
         .arg(format!("--port={}", port))
         .arg(format!("--user={}", username));
