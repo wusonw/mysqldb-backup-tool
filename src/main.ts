@@ -5,7 +5,7 @@ import { createPinia } from "pinia";
 import { initStore } from "./utils/store";
 import { useStore } from "./stores/store";
 import { setupWindowCloseHandler } from "./utils/window";
-import { initTray } from "./utils/tray";
+import { useTray } from "./utils/tray";
 
 // 导入自定义样式
 import "./assets/styles";
@@ -32,6 +32,6 @@ setupWindowCloseHandler().catch((error) => {
 });
 
 // 初始化系统托盘
-initTray().catch((error) => {
+useTray().catch((error) => {
   console.error("初始化系统托盘失败:", error);
 });
