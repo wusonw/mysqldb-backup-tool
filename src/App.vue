@@ -1,17 +1,13 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, computed, watch } from "vue";
+import { computed, watch } from "vue";
 import Settings from "./components/Settings.vue";
-import { useStore } from "./stores/store";
+import { usePiniaStore } from "./stores/store";
 import { useTheme } from "vuetify";
-import { setupWindowCloseHandler } from "./utils/window";
 
 // 使用Pinia Store
-const store = useStore();
+const store = usePiniaStore();
 // 使用Vuetify主题
 const theme = useTheme();
-
-// 判断是否为生产环境
-const isProduction = import.meta.env.PROD;
 
 // 计算属性：是否显示备份进度
 const showProgress = computed(() => store.showProgress);
@@ -26,26 +22,10 @@ watch(
   },
   { immediate: true } // 立即执行一次，确保初始化时应用正确的主题
 );
-
-// 初始化
-onMounted(async () => {
-  // 初始化所有设置并启动连接监控
-  await store.initializeSettings();
-  store.checkConnectionStatus();
-
-  // 设置窗口关闭事件监听
-  await setupWindowCloseHandler();
-  console.log("应用已启动，窗口关闭处理已配置");
-});
-
-// 组件卸载时清除定时器
-onUnmounted(() => {
-  store.stopConnectionMonitor();
-});
 </script>
 
 <template>
-  <v-app :class="{ 'production-mode': isProduction }">
+  <v-app>
     <v-main class="main-content">
       <v-container
         class="d-flex flex-column align-center justify-center main-container pa-0"

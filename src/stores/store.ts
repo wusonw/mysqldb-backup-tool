@@ -16,7 +16,7 @@ import { useDateFormat } from "@vueuse/core";
 import { sendNotification } from "@tauri-apps/plugin-notification";
 import { TrayIcon } from "@tauri-apps/api/tray";
 import { Menu } from "@tauri-apps/api/menu";
-import { showWindow, exitApp } from "../utils/window";
+import { exitApp, showWindow } from "../utils/window";
 
 // 定义Store的状态接口
 interface State {
@@ -82,7 +82,7 @@ export const backupFrequencies = [
 ];
 
 // 创建和导出store
-export const useStore = defineStore("main", {
+export const usePiniaStore = defineStore("main", {
   // 定义状态
   state: (): State => ({
     database: {
@@ -882,8 +882,8 @@ export const useStore = defineStore("main", {
           console.error("创建系统托盘失败:", error);
           throw error;
         }
-        return this.systemTray;
       }
+      return this.systemTray;
     },
   },
 });

@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { ref, reactive } from "vue";
-import { useStore } from "../../stores/store";
+import { usePiniaStore } from "../../stores/store";
 import Database from "@tauri-apps/plugin-sql";
 
 // 使用Pinia Store
-const store = useStore();
+const store = usePiniaStore();
 
 // 本地表单数据
 const formData = reactive({

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { useStore } from "../../stores/store";
+import { usePiniaStore } from "../../stores/store";
 
 // 使用Pinia Store
-const store = useStore();
+const store = usePiniaStore();
 
 // 切换深色模式
 const toggleDarkMode = (value: boolean | null) => {

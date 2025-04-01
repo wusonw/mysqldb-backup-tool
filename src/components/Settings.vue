@@ -3,10 +3,10 @@ import { computed } from "vue";
 import DatabaseSettings from "./settings/DatabaseSettings.vue";
 import BackupSettings from "./settings/BackupSettings.vue";
 import SystemSettings from "./settings/SystemSettings.vue";
-import { useStore, backupFrequencies } from "../stores/store";
+import { usePiniaStore, backupFrequencies } from "../stores/store";
 
 // 使用Pinia Store
-const store = useStore();
+const store = usePiniaStore();
 
 // 定义props
 const props = defineProps({

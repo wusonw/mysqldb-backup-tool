@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { useStore } from "../../stores/store";
+import { usePiniaStore } from "../../stores/store";
 import { open } from "@tauri-apps/plugin-dialog";
 import { computed, ref, watch } from "vue";
 
 // 使用Pinia Store
-const store = useStore();
+const store = usePiniaStore();
 
 // 获取mysqldump可用状态的文字说明
 const mysqldumpStatusText = computed(() => {
