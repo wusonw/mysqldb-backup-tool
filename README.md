@@ -171,7 +171,7 @@ mysql-backup-tool/
 
 ### 错误报告
 
-如果您遇到任何问题，请[提交 issue](https://github.com/wusonw/mysql-backup-tool/issues)，并提供以下信息：
+如果您遇到任何问题，请[提交 issue](https://github.com/wusonw/mysqldb-backup-tool/issues)，并提供以下信息：
 
 - 操作系统版本
 - 应用程序版本
@@ -181,9 +181,3 @@ mysql-backup-tool/
 ## 许可证
 
 本项目采用 MIT 许可证 - 详情请查看 [LICENSE](LICENSE) 文件
-
-## 联系方式
-
-如有任何问题或建议，请通过以下方式联系我们：
-
-- GitHub Issues: https://github.com/wusonw/mysql-backup-tool/issues
